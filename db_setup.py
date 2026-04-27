@@ -8,7 +8,9 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-DATABASE_URL = os.environ["DATABASE_URL"]
+
+def get_database_url() -> str:
+    return os.environ["DATABASE_URL"]
 
 CREATE_PAPERS_TABLE = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS papers (
 """
 
 def main():
-    with psycopg.connect(DATABASE_URL) as conn:
+    with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(CREATE_PAPERS_TABLE)
 
