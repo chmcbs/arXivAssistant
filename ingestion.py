@@ -22,3 +22,9 @@ def fetch_papers(
     papers_list = list(papers)
 
     return papers_list
+
+if __name__ == "__main__":
+    papers = fetch_papers()
+
+    for paper in papers:
+        print(paper.get_short_id(), paper.title)
