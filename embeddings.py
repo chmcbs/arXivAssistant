@@ -1,5 +1,5 @@
 """
-Reads papers without embeddings, generates vectors, and stores them.
+Reads papers without embeddings, generates vectors, and stores them
 """
 
 import os
