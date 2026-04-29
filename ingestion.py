@@ -8,6 +8,7 @@ import re
 import arxiv
 import psycopg
 from dotenv import load_dotenv
+import uuid
 
 load_dotenv()
 
@@ -93,7 +94,59 @@ def save_papers(papers: list[arxiv.Result]) -> int:
             cur.executemany(query, rows)
     return len(rows)
 
+def start_run(category: str, max_results: int) -> str:
+    run_id = str(uuid.uuid4())
+
+    query = """
+    INSERT INTO runs (run_id, status, category, max_results)
+    VALUES (%s, 'running', %s, %s);
+    """
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (run_id, category, max_results))
+
+    return run_id
+
+def complete_run(run_id: str, fetched_count: int, saved_count: int) -> None:
+    query = """
+    UPDATE runs
+    SET status = 'completed',
+        fetched_count = %s,
+        saved_count = %s,
+        finished_at = NOW()
+    WHERE run_id = %s;
+    """
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (fetched_count, saved_count, run_id))
+
+def fail_run(run_id: str, error_message: str) -> None:
+    query = """
+    UPDATE runs
+    SET status = 'failed',
+        finished_at = NOW(),
+        error_message = %s
+    WHERE run_id = %s;
+    """
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (error_message, run_id))
+
+def run_ingestion(category: str = "cs.AI", max_results: int = 10) -> str:
+    run_id = start_run(category, max_results)
+
+    try:
+        papers = fetch_papers(category=category, max_results=max_results)
+        saved_count = save_papers(papers)
+        complete_run(run_id, len(papers), saved_count)
+        print(f"Run {run_id} saved {saved_count} papers")
+        return run_id
+    except Exception as error:
+        fail_run(run_id, str(error))
+        raise
+
 if __name__ == "__main__":
-    papers = fetch_papers()
-    saved_count = save_papers(papers)
-    print(f"Saved {saved_count} papers")
+    run_ingestion()

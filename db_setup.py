@@ -27,10 +27,25 @@ CREATE TABLE IF NOT EXISTS papers (
 );
 """
 
+CREATE_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS runs (
+    run_id UUID PRIMARY KEY,
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+    category TEXT NOT NULL,
+    max_results INTEGER NOT NULL,
+    fetched_count INTEGER DEFAULT 0,
+    saved_count INTEGER DEFAULT 0,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    error_message TEXT
+);
+"""
+
 def main():
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(CREATE_PAPERS_TABLE)
+            cur.execute(CREATE_RUNS_TABLE)
 
 if __name__ == "__main__":
     main()
