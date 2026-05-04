@@ -1,6 +1,5 @@
 """
 Creates postgres table for storing fetched papers
-
 """
 
 import psycopg
@@ -54,6 +53,17 @@ CREATE TABLE IF NOT EXISTS paper_embeddings (
 );
 """
 
+CREATE_PAPERS_KEYWORD_INDEX = """
+CREATE INDEX IF NOT EXISTS papers_keyword_idx
+ON papers
+USING GIN (
+    (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
+    )
+);
+"""
+
 def main():
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
@@ -61,6 +71,7 @@ def main():
             cur.execute(CREATE_PAPERS_TABLE)
             cur.execute(CREATE_RUNS_TABLE)
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
+            cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
 
 if __name__ == "__main__":
     main()
