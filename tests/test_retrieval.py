@@ -95,3 +95,35 @@ def test_search_hybrid_papers_merges_and_ranks_results(monkeypatch):
     assert results[0]["final_score"] == 0.6
     assert results[1]["final_score"] == 0.5
     assert results[2]["final_score"] == 0.4
+
+def test_search_hybrid_papers_uses_configured_weights_by_default(monkeypatch):
+    keyword_results = [
+        {
+            "arxiv_id": "keyword-only",
+            "title": "Keyword Match",
+            "abstract": "",
+            "keyword_score": 4.0,
+        },
+    ]
+    dense_results = [
+        {
+            "arxiv_id": "dense-only",
+            "title": "Dense Match",
+            "abstract": "",
+            "dense_score": 0.9,
+        },
+    ]
+
+    monkeypatch.setattr(retrieval, "search_keyword_papers", Mock(return_value=keyword_results))
+    monkeypatch.setattr(retrieval, "search_dense_papers", Mock(return_value=dense_results))
+    monkeypatch.setattr(retrieval, "get_hybrid_weights", Mock(return_value=(0.25, 0.75)))
+
+    results = retrieval.search_hybrid_papers("agents", limit=2)
+
+    assert [result["arxiv_id"] for result in results] == [
+        "keyword-only",
+        "dense-only",
+    ]
+    assert results[0]["final_score"] == 0.75
+    assert results[1]["final_score"] == 0.25
+    retrieval.get_hybrid_weights.assert_called_once_with()
