@@ -6,6 +6,7 @@ import os
 import psycopg
 from dotenv import load_dotenv
 from embeddings import embed_texts
+from config import get_hybrid_weights
 
 load_dotenv()
 
@@ -104,13 +105,18 @@ def normalize_score(score: float, max_score: float) -> float:
 
     return score / max_score
 
-# Use 60/40 weighting for dense/keyword
+# Dense/keyword weight is defined in config.py
 def search_hybrid_papers(
     query: str,
     limit: int = 10,
-    dense_weight: float = 0.6,
-    keyword_weight: float = 0.4,
+    dense_weight: float | None = None,
+    keyword_weight: float | None = None,
 ) -> list[dict]:
+    if dense_weight is None and keyword_weight is None:
+        dense_weight, keyword_weight = get_hybrid_weights()
+    elif dense_weight is None or keyword_weight is None:
+        raise ValueError("dense_weight and keyword_weight must be provided together")
+
     keyword_results = search_keyword_papers(query, limit=limit)
     dense_results = search_dense_papers(query, limit=limit)
 
