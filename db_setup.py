@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def get_database_url() -> str:
+def get_database_url() -> str: # TODO: Move to a shared database helper module
     return os.environ["DATABASE_URL"]
 
 CREATE_PAPERS_TABLE = """
@@ -64,6 +64,24 @@ USING GIN (
 );
 """
 
+CREATE_USER_PREFERENCES_TABLE = """
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id TEXT PRIMARY KEY,
+    preference_embedding vector(384) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+CREATE_PAPER_FEEDBACK_TABLE = """
+CREATE TABLE IF NOT EXISTS paper_feedback (
+    feedback_id UUID PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES user_preferences(user_id) ON DELETE CASCADE,
+    arxiv_id TEXT NOT NULL REFERENCES papers(arxiv_id) ON DELETE CASCADE,
+    label TEXT NOT NULL CHECK (label IN ('like', 'dislike')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
 def main():
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
@@ -72,6 +90,8 @@ def main():
             cur.execute(CREATE_RUNS_TABLE)
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
             cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
+            cur.execute(CREATE_USER_PREFERENCES_TABLE)
+            cur.execute(CREATE_PAPER_FEEDBACK_TABLE)
 
 if __name__ == "__main__":
     main()
