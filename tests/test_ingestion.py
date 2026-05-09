@@ -2,7 +2,7 @@
 Tests the ingestion pipeline
 """
 
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 import pytest
 import ingestion
 from ingestion import clean_id
@@ -46,3 +46,42 @@ def test_run_ingestion_marks_run_failed(monkeypatch):
     ingestion.fail_run.assert_called_once_with("run-123", "arxiv failed")
     ingestion.save_papers.assert_not_called()
     ingestion.complete_run.assert_not_called()
+
+def test_save_papers_maps_arxiv_results_to_database_rows(monkeypatch):
+    paper = Mock()
+    paper.get_short_id.return_value = "2401.12345v2"
+    paper.title = "Test Paper"
+    paper.summary = "Test abstract"
+    paper.authors = ["Alice", "Bob"]
+    paper.published = "published-date"
+    paper.updated = "updated-date"
+    paper.pdf_url = "https://example.com/paper.pdf"
+    paper.entry_id = "https://arxiv.org/abs/2401.12345"
+    paper.categories = ["cs.AI"]
+
+    cursor = MagicMock()
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+
+    connect = MagicMock()
+    connect.return_value.__enter__.return_value = connection
+    monkeypatch.setattr(ingestion.psycopg, "connect", connect)
+
+    saved_count = ingestion.save_papers([paper])
+
+    assert saved_count == 1
+    cursor.executemany.assert_called_once()
+    rows = cursor.executemany.call_args.args[1]
+    assert rows == [
+        {
+            "arxiv_id": "2401.12345",
+            "title": "Test Paper",
+            "abstract": "Test abstract",
+            "authors": ["Alice", "Bob"],
+            "published_at": "published-date",
+            "updated_at": "updated-date",
+            "pdf_url": "https://example.com/paper.pdf",
+            "entry_url": "https://arxiv.org/abs/2401.12345",
+            "categories": ["cs.AI"],
+        }
+    ]
