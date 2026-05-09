@@ -2,7 +2,7 @@
 Tests the embeddings pipeline
 """
 
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 import embeddings
 from embeddings import paper_text
 
@@ -56,3 +56,39 @@ def test_run_embeddings_generates_and_saves_embeddings(monkeypatch):
         ]
     )
     embeddings.save_embeddings.assert_called_once_with(papers, vectors)
+
+def test_save_embeddings_maps_papers_and_vectors_to_database_rows(monkeypatch):
+    papers = [
+        {"arxiv_id": "2401.12345"},
+        {"arxiv_id": "2401.67890"},
+    ]
+    vectors = [
+        [0.1, 0.2],
+        [0.3, 0.4],
+    ]
+
+    cursor = MagicMock()
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+
+    connect = MagicMock()
+    connect.return_value.__enter__.return_value = connection
+    monkeypatch.setattr(embeddings.psycopg, "connect", connect)
+
+    saved_count = embeddings.save_embeddings(papers, vectors)
+
+    assert saved_count == 2
+    cursor.executemany.assert_called_once()
+    rows = cursor.executemany.call_args.args[1]
+    assert rows == [
+        {
+            "arxiv_id": "2401.12345",
+            "embedding": [0.1, 0.2],
+            "model_name": embeddings.MODEL_NAME,
+        },
+        {
+            "arxiv_id": "2401.67890",
+            "embedding": [0.3, 0.4],
+            "model_name": embeddings.MODEL_NAME,
+        },
+    ]
