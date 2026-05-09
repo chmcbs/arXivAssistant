@@ -10,20 +10,25 @@ from config import get_hybrid_weights
 
 load_dotenv()
 
-# Give title matches more importance than abstract matches
+def get_database_url() -> str:
+    return os.environ["DATABASE_URL"]
+
+def clean_query(query: str) -> str:
+    return query.strip()
+
+########################################
+############### SPARSE #################
+########################################
+
+# Match papers_keyword_idx expression in db_setup.py so Postgres can use the GIN index
 PAPER_SEARCH_VECTOR_SQL = """
 setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
 """
 
-def get_database_url() -> str:
-    return os.environ["DATABASE_URL"]
-
-def keyword_query(query: str) -> str:
-    return query.strip()
-
+# Convert keywords to a Postgres tsquery, then compare to each paper's combined title/abstract tsvector and return the most relevant
 def search_keyword_papers(query: str, limit: int = 10) -> list[dict]:
-    cleaned_query = keyword_query(query)
+    cleaned_query = clean_query(query)
 
     if not cleaned_query:
         return []
@@ -58,13 +63,17 @@ def search_keyword_papers(query: str, limit: int = 10) -> list[dict]:
         for row in rows
     ]
 
-# Convert the list of floats into string format for pgvector
+########################################
+############### DENSE ##################
+########################################
+
+# Convert embeddings into string format for pgvector
 def vector_literal(vector: list[float]) -> str:
     return "[" + ",".join(str(value) for value in vector) + "]"
 
 # Query paper_embeddings and return papers sorted by cosine similarity to the query vector
 def search_dense_papers(query: str, limit: int = 10) -> list[dict]:
-    cleaned_query = keyword_query(query)
+    cleaned_query = clean_query(query)
 
     if not cleaned_query:
         return []
@@ -98,6 +107,10 @@ def search_dense_papers(query: str, limit: int = 10) -> list[dict]:
         for row in rows
     ]
 
+########################################
+############### HYBRID #################
+########################################
+
 # Make keyword scores and dense scores comparable
 def normalize_score(score: float, max_score: float) -> float:
     if max_score <= 0:
@@ -105,7 +118,6 @@ def normalize_score(score: float, max_score: float) -> float:
 
     return score / max_score
 
-# Dense/keyword weight is defined in config.py
 def search_hybrid_papers(
     query: str,
     limit: int = 10,
