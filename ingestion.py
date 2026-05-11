@@ -7,10 +7,11 @@ import arxiv
 import psycopg
 import uuid
 from db_helper import get_database_url
+from config import get_arxiv_categories
 
 def fetch_papers(
     category: str = 'cs.AI',
-    max_results: int = 10,
+    max_results: int = 150,
     sort_by: arxiv.SortCriterion = arxiv.SortCriterion.SubmittedDate,
     sort_order: arxiv.SortOrder = arxiv.SortOrder.Descending,
     ):
@@ -128,18 +129,27 @@ def fail_run(run_id: str, error_message: str) -> None:
         with conn.cursor() as cur:
             cur.execute(query, (error_message, run_id))
 
-def run_ingestion(category: str = "cs.AI", max_results: int = 10) -> str:
-    run_id = start_run(category, max_results)
+def run_ingestion(categories: list[str] | None = None, max_results: int = 150) -> list[str]:
+    if categories is None:
+        categories = get_arxiv_categories()
 
-    try:
-        papers = fetch_papers(category=category, max_results=max_results)
-        saved_count = save_papers(papers)
-        complete_run(run_id, len(papers), saved_count)
-        print(f"Run {run_id} saved {saved_count} papers")
-        return run_id
-    except Exception as error:
-        fail_run(run_id, str(error))
-        raise
+    run_ids = []
+
+    for category in categories:
+        run_id = start_run(category, max_results)
+
+        try:
+            papers = fetch_papers(category=category, max_results=max_results)
+            saved_count = save_papers(papers)
+            complete_run(run_id, len(papers), saved_count)
+            print(f"Run {run_id} [{category}] saved {saved_count} papers")
+        except Exception as error:
+            fail_run(run_id, str(error))
+            print(f"Run {run_id} [{category}] failed: {error}")
+
+        run_ids.append(run_id)
+
+    return run_ids
 
 if __name__ == "__main__":
     run_ingestion()

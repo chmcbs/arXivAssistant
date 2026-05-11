@@ -22,9 +22,9 @@ def test_run_ingestion_completes_run(monkeypatch):
     monkeypatch.setattr(ingestion, "complete_run", Mock())
     monkeypatch.setattr(ingestion, "fail_run", Mock())
 
-    run_id = ingestion.run_ingestion("cs.AI", 10)
+    run_ids = ingestion.run_ingestion(["cs.AI"], 10)
 
-    assert run_id == "run-123"
+    assert run_ids == ["run-123"]
     ingestion.start_run.assert_called_once_with("cs.AI", 10)
     ingestion.fetch_papers.assert_called_once_with(category="cs.AI", max_results=10)
     ingestion.save_papers.assert_called_once_with(papers)
@@ -40,12 +40,29 @@ def test_run_ingestion_marks_run_failed(monkeypatch):
     monkeypatch.setattr(ingestion, "complete_run", Mock())
     monkeypatch.setattr(ingestion, "fail_run", Mock())
 
-    with pytest.raises(RuntimeError):
-        ingestion.run_ingestion("cs.AI", 10)
+    run_ids = ingestion.run_ingestion(["cs.AI"], 10)
 
+    assert run_ids == ["run-123"]
     ingestion.fail_run.assert_called_once_with("run-123", "arxiv failed")
     ingestion.save_papers.assert_not_called()
     ingestion.complete_run.assert_not_called()
+
+def test_run_ingestion_continues_after_category_failure(monkeypatch):
+    papers = [object(), object()]
+
+    monkeypatch.setattr(ingestion, "start_run", Mock(side_effect=["run-1", "run-2"]))
+    monkeypatch.setattr(ingestion, "fetch_papers", Mock(
+        side_effect=[RuntimeError("failed"), papers],
+    ))
+    monkeypatch.setattr(ingestion, "save_papers", Mock(return_value=2))
+    monkeypatch.setattr(ingestion, "complete_run", Mock())
+    monkeypatch.setattr(ingestion, "fail_run", Mock())
+
+    run_ids = ingestion.run_ingestion(["cs.AI", "cs.CL"], 10)
+
+    assert run_ids == ["run-1", "run-2"]
+    ingestion.fail_run.assert_called_once_with("run-1", "failed")
+    ingestion.complete_run.assert_called_once_with("run-2", 2, 2)
 
 def test_save_papers_maps_arxiv_results_to_database_rows(monkeypatch):
     paper = Mock()

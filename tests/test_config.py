@@ -30,3 +30,19 @@ def test_get_hybrid_weights_rejects_zero_total(monkeypatch):
 
     with pytest.raises(ValueError, match="greater than zero"):
         config.get_hybrid_weights()
+
+def test_get_arxiv_categories_uses_default(monkeypatch):
+    monkeypatch.delenv("ARXIV_CATEGORIES", raising=False)
+
+    assert config.get_arxiv_categories() == ["cs.AI"]
+
+def test_get_arxiv_categories_parses_comma_separated(monkeypatch):
+    monkeypatch.setenv("ARXIV_CATEGORIES", "cs.AI, cs.CL, cs.LG")
+
+    assert config.get_arxiv_categories() == ["cs.AI", "cs.CL", "cs.LG"]
+
+def test_get_arxiv_categories_rejects_empty(monkeypatch):
+    monkeypatch.setenv("ARXIV_CATEGORIES", "  ,  , ")
+
+    with pytest.raises(ValueError, match="At least one"):
+        config.get_arxiv_categories()

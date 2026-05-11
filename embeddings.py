@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
-def get_papers_missing_embeddings(limit: int = 100) -> list[dict]:
+def get_papers_missing_embeddings(limit: int) -> list[dict]:
     query = """
     SELECT p.arxiv_id, p.title, p.abstract
     FROM papers p
@@ -75,7 +75,7 @@ def save_embeddings(papers: list[dict], embeddings: list[list[float]]) -> int:
 
     return len(rows)
 
-def run_embeddings(limit: int = 100) -> int:
+def run_embeddings(limit: int = 600) -> int:
     papers = get_papers_missing_embeddings(limit)
 
     if not papers:
