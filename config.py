@@ -3,6 +3,9 @@ Loads shared settings from environment variables
 """
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID", "default")
 

@@ -2,19 +2,11 @@
 Searches stored papers using hybrid retrieval
 """
 
-import os
 import psycopg
-from dotenv import load_dotenv
 from embeddings import embed_texts
 from config import DEFAULT_USER_ID, get_hybrid_weights
-
-load_dotenv()
-
-def get_database_url() -> str: # TODO: Move to a shared database helper module
-    return os.environ["DATABASE_URL"]
-
-def clean_query(query: str) -> str:
-    return query.strip()
+from db_helper import get_database_url
+from vector_helper import vector_literal
 
 ########################################
 ############### SPARSE #################
@@ -25,6 +17,9 @@ PAPER_SEARCH_VECTOR_SQL = """
 setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
 setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
 """
+
+def clean_query(query: str) -> str:
+    return query.strip()
 
 # Convert keywords to a Postgres tsquery, then compare to each paper's combined title/abstract tsvector and return the most relevant
 def search_keyword_papers(query: str, limit: int = 10) -> list[dict]:
@@ -66,9 +61,6 @@ def search_keyword_papers(query: str, limit: int = 10) -> list[dict]:
 ########################################
 ############### DENSE ##################
 ########################################
-
-def vector_literal(vector: list[float]) -> str: # TODO: Move to a shared vector helper module
-    return "[" + ",".join(str(value) for value in vector) + "]"
 
 # Query paper_embeddings and return papers sorted by cosine similarity to the query vector
 def search_dense_papers(query: str, limit: int = 10) -> list[dict]:

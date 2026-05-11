@@ -3,13 +3,7 @@ Creates postgres table for storing fetched papers
 """
 
 import psycopg
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-def get_database_url() -> str: # TODO: Move to a shared database helper module
-    return os.environ["DATABASE_URL"]
+from db_helper import get_database_url
 
 CREATE_PAPERS_TABLE = """
 CREATE TABLE IF NOT EXISTS papers (

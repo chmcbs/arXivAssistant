@@ -2,17 +2,11 @@
 Fetches papers from arXiv and stores them idempotently
 """
 
-import os
 import re
 import arxiv
 import psycopg
-from dotenv import load_dotenv
 import uuid
-
-load_dotenv()
-
-def get_database_url() -> str:
-    return os.environ["DATABASE_URL"]
+from db_helper import get_database_url
 
 def fetch_papers(
     category: str = 'cs.AI',

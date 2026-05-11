@@ -2,17 +2,11 @@
 Reads papers without embeddings, generates vectors, and stores them in the paper_embeddings table
 """
 
-import os
 import psycopg
-from dotenv import load_dotenv
+from db_helper import get_database_url
 from sentence_transformers import SentenceTransformer
 
-load_dotenv()
-
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-
-def get_database_url() -> str:
-    return os.environ["DATABASE_URL"]
 
 def get_papers_missing_embeddings(limit: int = 100) -> list[dict]:
     query = """

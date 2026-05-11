@@ -1,17 +1,9 @@
-import os
 import psycopg
-from dotenv import load_dotenv
 from embeddings import embed_texts
-from config import DEFAULT_USER_ID
 import uuid
-
-load_dotenv()
-
-def get_database_url() -> str: # TODO: Move to a shared database helper module
-    return os.environ["DATABASE_URL"]
-
-def vector_literal(vector: list[float]) -> str: # TODO: Move to a shared vector helper module
-    return "[" + ",".join(str(value) for value in vector) + "]"
+from config import DEFAULT_USER_ID
+from db_helper import get_database_url
+from vector_helper import vector_literal
 
 def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_USER_ID) -> None:
     preference_vector = vector_literal(embed_texts([interest_text])[0])
