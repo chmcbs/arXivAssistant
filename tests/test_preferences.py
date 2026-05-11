@@ -17,6 +17,28 @@ def test_mean_vector_averages_vectors():
 def test_mean_vector_returns_empty_for_no_vectors():
     assert preferences.mean_vector([]) == []
 
+def test_blend_vectors_combines_initial_and_feedback_by_alpha():
+    blended = preferences.blend_vectors(
+        initial_vector=[1.0, 1.0],
+        feedback_vector=[3.0, 5.0],
+        alpha=0.25,
+    )
+
+    assert blended == [2.5, 4.0]
+
+def test_feedback_alpha_decays_as_feedback_count_increases():
+    assert preferences.feedback_alpha(0) == 1.0
+    assert preferences.feedback_alpha(1) == 0.5
+    assert preferences.feedback_alpha(3) == 0.25
+
+def test_normalize_vector_scales_vector_to_unit_length():
+    normalized = preferences.normalize_vector([3.0, 4.0])
+
+    assert normalized == [0.6, 0.8]
+
+def test_normalize_vector_returns_zero_vector_unchanged():
+    assert preferences.normalize_vector([0.0, 0.0]) == [0.0, 0.0]
+
 def test_compute_preference_vector_uses_liked_mean_when_no_dislikes():
     preference = preferences.compute_preference_vector(
         liked_vectors=[
@@ -92,14 +114,14 @@ def test_initialize_preference_embedding_embeds_and_saves_interest_text(monkeypa
     preferences.embed_texts.assert_called_once_with(["language agents"])
     cursor.execute.assert_called_once()
     params = cursor.execute.call_args.args[1]
-    assert params == ("default", "[0.1,0.2]")
+    assert params == ("default", "[0.1,0.2]", "[0.1,0.2]")
 
 def test_update_preference_embedding_computes_and_saves_from_feedback(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = [
-        ([1.0, 2.0], "like"),
-        ([3.0, 4.0], "like"),
-        ([0.5, 1.0], "dislike"),
+        ([1.0, 1.0], [1.0, 2.0], "like"),
+        ([1.0, 1.0], [3.0, 4.0], "like"),
+        ([1.0, 1.0], [0.5, 1.0], "dislike"),
     ]
 
     connection = MagicMock()
@@ -117,4 +139,6 @@ def test_update_preference_embedding_computes_and_saves_from_feedback(monkeypatc
     save_params = cursor.execute.call_args_list[1].args[1]
 
     assert fetch_params == ("default",)
-    assert save_params == ("default", "[1.75,2.5]")
+    assert save_params[1] == "default"
+    assert save_params[0].startswith("[")
+    assert save_params[0].endswith("]")

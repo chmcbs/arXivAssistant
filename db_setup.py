@@ -67,6 +67,7 @@ USING GIN (
 CREATE_USER_PREFERENCES_TABLE = """
 CREATE TABLE IF NOT EXISTS user_preferences (
     user_id TEXT PRIMARY KEY,
+    initial_interest_embedding vector(384) NOT NULL,
     preference_embedding vector(384) NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

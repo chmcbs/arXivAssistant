@@ -2,8 +2,8 @@ import os
 import psycopg
 from dotenv import load_dotenv
 from embeddings import embed_texts
+from config import DEFAULT_USER_ID
 import uuid
-
 
 load_dotenv()
 
@@ -13,30 +13,30 @@ def get_database_url() -> str: # TODO: Move to a shared database helper module
 def vector_literal(vector: list[float]) -> str: # TODO: Move to a shared vector helper module
     return "[" + ",".join(str(value) for value in vector) + "]"
 
-DEFAULT_USER_ID = "default"
-
 def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_USER_ID) -> None:
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
-    # TODO: Move to a helper function
     sql = """
     INSERT INTO user_preferences (
         user_id,
+        initial_interest_embedding,
         preference_embedding
     )
     VALUES (
         %s,
+        %s::vector,
         %s::vector
     )
     ON CONFLICT (user_id)
     DO UPDATE SET
+        initial_interest_embedding = EXCLUDED.initial_interest_embedding,
         preference_embedding = EXCLUDED.preference_embedding,
         updated_at = NOW();
     """
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (user_id, preference_vector))
+            cur.execute(sql, (user_id, preference_vector, preference_vector))
 
 def save_feedback(
     arxiv_id: str,
@@ -75,6 +75,27 @@ def mean_vector(vectors: list[list[float]]) -> list[float]:
         for index in range(dimension)
     ]
 
+def blend_vectors(
+    initial_vector: list[float],
+    feedback_vector: list[float],
+    alpha: float,
+) -> list[float]:
+    return [
+        alpha * initial_value + (1 - alpha) * feedback_value
+        for initial_value, feedback_value in zip(initial_vector, feedback_vector)
+    ]
+
+def feedback_alpha(num_feedbacks: int) -> float:
+    return 1 / (1 + num_feedbacks)
+
+def normalize_vector(vector: list[float]) -> list[float]:
+    magnitude = sum(value * value for value in vector) ** 0.5
+
+    if magnitude == 0:
+        return vector
+
+    return [value / magnitude for value in vector]
+
 def compute_preference_vector(
     liked_vectors: list[list[float]],
     disliked_vectors: list[list[float]],
@@ -97,10 +118,14 @@ def compute_preference_vector(
 
 def update_preference_embedding(user_id: str = DEFAULT_USER_ID) -> None:
     sql = """
-    SELECT e.embedding, f.label
-    FROM paper_feedback f
-    JOIN paper_embeddings e ON e.arxiv_id = f.arxiv_id
-    WHERE f.user_id = %s;
+    SELECT
+        up.initial_interest_embedding,
+        e.embedding,
+        f.label
+    FROM user_preferences up
+    LEFT JOIN paper_feedback f ON f.user_id = up.user_id
+    LEFT JOIN paper_embeddings e ON e.arxiv_id = f.arxiv_id
+    WHERE up.user_id = %s;
     """
 
     with psycopg.connect(get_database_url()) as conn:
@@ -108,39 +133,48 @@ def update_preference_embedding(user_id: str = DEFAULT_USER_ID) -> None:
             cur.execute(sql, (user_id,))
             rows = cur.fetchall()
 
+    if not rows:
+        raise ValueError(f"No preference profile found for user_id={user_id}")
+
+    initial_vector = list(rows[0][0])
+
     liked_vectors = [
         list(embedding)
-        for embedding, label in rows
-        if label == "like"
+        for _, embedding, label in rows
+        if embedding is not None and label == "like"
     ]
     disliked_vectors = [
         list(embedding)
-        for embedding, label in rows
-        if label == "dislike"
+        for _, embedding, label in rows
+        if embedding is not None and label == "dislike"
     ]
 
-    preference_vector = compute_preference_vector(
-        liked_vectors,
-        disliked_vectors,
-    )
+    num_feedbacks = len(liked_vectors) + len(disliked_vectors)
+
+    if not liked_vectors:
+        preference_vector = initial_vector
+    else:
+        feedback_vector = compute_preference_vector(
+            liked_vectors,
+            disliked_vectors,
+        )
+        alpha = feedback_alpha(num_feedbacks)
+        preference_vector = blend_vectors(
+            initial_vector,
+            feedback_vector,
+            alpha,
+        )
+
+    preference_vector = normalize_vector(preference_vector)
     preference_vector_literal = vector_literal(preference_vector)
 
-    # TODO: Move to a helper function
     save_sql = """
-    INSERT INTO user_preferences (
-        user_id,
-        preference_embedding
-    )
-    VALUES (
-        %s,
-        %s::vector
-    )
-    ON CONFLICT (user_id)
-    DO UPDATE SET
-        preference_embedding = EXCLUDED.preference_embedding,
-        updated_at = NOW();
+    UPDATE user_preferences
+    SET preference_embedding = %s::vector,
+        updated_at = NOW()
+    WHERE user_id = %s;
     """
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(save_sql, (user_id, preference_vector_literal))
+            cur.execute(save_sql, (preference_vector_literal, user_id))

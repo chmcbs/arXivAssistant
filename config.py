@@ -4,6 +4,8 @@ Loads shared settings from environment variables
 
 import os
 
+DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID", "default")
+
 def get_hybrid_weights() -> tuple[float, float]:
     dense = float(os.getenv("HYBRID_DENSE_WEIGHT", "0.6"))
     keyword = float(os.getenv("HYBRID_KEYWORD_WEIGHT", "0.4"))
