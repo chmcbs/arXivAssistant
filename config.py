@@ -9,6 +9,10 @@ load_dotenv()
 
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID", "default")
 DEFAULT_DAILY_K = int(os.getenv("DAILY_PICKS_K", "3"))
+DEFAULT_INTEREST_TEXT = os.getenv(
+    "DEFAULT_INTEREST_TEXT",
+    "I'm interested in learning about artificial intelligence research.",
+)
 
 def get_hybrid_weights() -> tuple[float, float]:
     dense = float(os.getenv("HYBRID_DENSE_WEIGHT", "0.6"))
