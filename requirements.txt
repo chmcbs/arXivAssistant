@@ -1,0 +1,6 @@
+arxiv
+fastapi
+psycopg[binary]
+python-dotenv
+sentence-transformers
+uvicorn

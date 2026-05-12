@@ -73,10 +73,11 @@ def test_save_feedback_rejects_invalid_label():
     with pytest.raises(ValueError, match="label must be 'like' or 'dislike'"):
         preferences.save_feedback("2401.12345", "maybe")
 
-def test_save_feedback_inserts_database_row(monkeypatch):
+def test_save_feedback_upserts_database_row(monkeypatch):
     monkeypatch.setattr(preferences.uuid, "uuid4", Mock(return_value="feedback-123"))
 
     cursor = MagicMock()
+    cursor.fetchone.return_value = ("feedback-123",)
     connection = MagicMock()
     connection.cursor.return_value.__enter__.return_value = cursor
 
@@ -92,7 +93,10 @@ def test_save_feedback_inserts_database_row(monkeypatch):
 
     assert feedback_id == "feedback-123"
     cursor.execute.assert_called_once()
+    query = cursor.execute.call_args.args[0]
     params = cursor.execute.call_args.args[1]
+    assert "ON CONFLICT (user_id, arxiv_id)" in query
+    assert "RETURNING feedback_id" in query
     assert params == ("feedback-123", "default", "2401.12345", "like")
 
 def test_initialize_preference_embedding_embeds_and_saves_interest_text(monkeypatch):

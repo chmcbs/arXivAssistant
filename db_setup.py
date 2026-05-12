@@ -82,6 +82,11 @@ CREATE TABLE IF NOT EXISTS paper_feedback (
 );
 """
 
+CREATE_PAPER_FEEDBACK_USER_PAPER_INDEX = """
+CREATE UNIQUE INDEX IF NOT EXISTS paper_feedback_user_paper_idx
+ON paper_feedback (user_id, arxiv_id);
+"""
+
 CREATE_RECOMMENDATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS recommendations (
     recommendation_id UUID PRIMARY KEY,
@@ -119,6 +124,7 @@ def main():
             cur.execute(CREATE_USER_PREFERENCES_TABLE)
             cur.execute(ALTER_USER_PREFERENCES_ADD_DAILY_K)
             cur.execute(CREATE_PAPER_FEEDBACK_TABLE)
+            cur.execute(CREATE_PAPER_FEEDBACK_USER_PAPER_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_TABLE)
             cur.execute(CREATE_RECOMMENDATIONS_USER_GENERATED_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_USER_PAPER_GENERATED_INDEX)

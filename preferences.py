@@ -1,3 +1,7 @@
+"""
+Builds and updates user preference embeddings
+"""
+
 import psycopg
 from embeddings import embed_texts
 import uuid
@@ -60,14 +64,20 @@ def save_feedback(
         arxiv_id,
         label
     )
-    VALUES (%s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (user_id, arxiv_id)
+    DO UPDATE SET
+        label = EXCLUDED.label,
+        created_at = NOW()
+    RETURNING feedback_id;
     """
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (feedback_id, user_id, arxiv_id, label))
+            row = cur.fetchone()
 
-    return feedback_id
+    return str(row[0])
 
 def mean_vector(vectors: list[list[float]]) -> list[float]:
     if not vectors:
