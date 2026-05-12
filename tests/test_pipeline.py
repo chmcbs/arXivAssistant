@@ -1,0 +1,69 @@
+"""
+Tests the full recommendation pipeline
+"""
+
+from unittest.mock import Mock
+import pipeline
+
+def test_run_pipeline_calls_steps_in_order(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        pipeline,
+        "setup_database",
+        Mock(side_effect=lambda: calls.append("setup_database")),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "run_ingestion",
+        Mock(side_effect=lambda max_results: calls.append(("run_ingestion", max_results)) or ["run-1", "run-2"]),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "run_embeddings",
+        Mock(side_effect=lambda limit: calls.append(("run_embeddings", limit)) or 5),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "generate_recommendations",
+        Mock(
+            side_effect=lambda run_id, user_id: calls.append(("generate_recommendations", run_id, user_id)) or [{"rank": 1}]
+        ),
+    )
+
+    summary = pipeline.run_pipeline(
+        user_id="default",
+        max_results=123,
+        embedding_limit=456,
+    )
+
+    assert calls == [
+        "setup_database",
+        ("run_ingestion", 123),
+        ("run_embeddings", 456),
+        ("generate_recommendations", "run-1", "default"),
+        ("generate_recommendations", "run-2", "default"),
+    ]
+    assert summary["run_ids"] == ["run-1", "run-2"]
+    assert summary["embedded_count"] == 5
+    assert summary["recommendations_by_run"] == {
+        "run-1": [{"rank": 1}],
+        "run-2": [{"rank": 1}],
+    }
+
+def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
+    monkeypatch.setattr(pipeline, "setup_database", Mock())
+    monkeypatch.setattr(pipeline, "run_ingestion", Mock(return_value=["run-1", "run-2"]))
+    monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=3))
+    monkeypatch.setattr(
+        pipeline,
+        "generate_recommendations",
+        Mock(side_effect=[RuntimeError("boom"), [{"rank": 1}]]),
+    )
+
+    summary = pipeline.run_pipeline(user_id="default")
+
+    assert summary["recommendations_by_run"] == {
+        "run-1": [],
+        "run-2": [{"rank": 1}],
+    }
