@@ -1,9 +1,13 @@
 """
-Creates postgres table for storing fetched papers
+Creates the Postgres schema
 """
 
 import psycopg
 from db_helper import get_database_url
+
+########################################
+############### PAPERS #################
+########################################
 
 CREATE_PAPERS_TABLE = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -20,6 +24,21 @@ CREATE TABLE IF NOT EXISTS papers (
 );
 """
 
+CREATE_PAPERS_KEYWORD_INDEX = """
+CREATE INDEX IF NOT EXISTS papers_keyword_idx
+ON papers
+USING GIN (
+    (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
+    )
+);
+"""
+
+########################################
+################ RUNS ##################
+########################################
+
 CREATE_RUNS_TABLE = """
 CREATE TABLE IF NOT EXISTS runs (
     run_id UUID PRIMARY KEY,
@@ -34,6 +53,10 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 """
 
+########################################
+############# EMBEDDINGS ###############
+########################################
+
 CREATE_VECTOR_EXTENSION = """
 CREATE EXTENSION IF NOT EXISTS vector;
 """
@@ -47,16 +70,9 @@ CREATE TABLE IF NOT EXISTS paper_embeddings (
 );
 """
 
-CREATE_PAPERS_KEYWORD_INDEX = """
-CREATE INDEX IF NOT EXISTS papers_keyword_idx
-ON papers
-USING GIN (
-    (
-        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-        setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
-    )
-);
-"""
+########################################
+####### PREFERENCES & FEEDBACK #########
+########################################
 
 CREATE_USER_PREFERENCES_TABLE = """
 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -86,6 +102,10 @@ CREATE_PAPER_FEEDBACK_USER_PAPER_INDEX = """
 CREATE UNIQUE INDEX IF NOT EXISTS paper_feedback_user_paper_idx
 ON paper_feedback (user_id, arxiv_id);
 """
+
+########################################
+########### RECOMMENDATIONS ############
+########################################
 
 CREATE_RECOMMENDATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS recommendations (

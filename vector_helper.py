@@ -1,5 +1,5 @@
 """
-Formats vectors for database storage
+Vector formatting helper for database storage
 """
 
 def vector_literal(vector: list[float]) -> str:

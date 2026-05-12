@@ -1,5 +1,5 @@
 """
-Loads shared settings from environment variables
+Default application settings
 """
 
 import os
@@ -14,6 +14,17 @@ DEFAULT_INTEREST_TEXT = os.getenv(
     "I'm interested in learning about artificial intelligence research.",
 )
 
+# Ingestion
+def get_arxiv_categories() -> list[str]:
+    raw = os.getenv("ARXIV_CATEGORIES", "cs.AI")
+    categories = [c.strip() for c in raw.split(",") if c.strip()]
+
+    if not categories:
+        raise ValueError("At least one arXiv category must be configured")
+
+    return categories
+
+# Retrieval
 def get_hybrid_weights() -> tuple[float, float]:
     dense = float(os.getenv("HYBRID_DENSE_WEIGHT", "0.6"))
     keyword = float(os.getenv("HYBRID_KEYWORD_WEIGHT", "0.4"))
@@ -27,17 +38,9 @@ def get_hybrid_weights() -> tuple[float, float]:
 
     return dense / total, keyword / total
 
+# Recommendation
 def get_daily_picks_k() -> int:
     if DEFAULT_DAILY_K < 1:
         raise ValueError("DAILY_PICKS_K must be >= 1")
 
     return DEFAULT_DAILY_K
-
-def get_arxiv_categories() -> list[str]:
-    raw = os.getenv("ARXIV_CATEGORIES", "cs.AI")
-    categories = [c.strip() for c in raw.split(",") if c.strip()]
-
-    if not categories:
-        raise ValueError("At least one arXiv category must be configured")
-
-    return categories
