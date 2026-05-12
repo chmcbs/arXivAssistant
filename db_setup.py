@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 );
 """
 
+ALTER_USER_PREFERENCES_ADD_DAILY_K = """
+ALTER TABLE user_preferences
+ADD COLUMN IF NOT EXISTS daily_k INTEGER CHECK (daily_k >= 1);
+"""
+
 CREATE_PAPER_FEEDBACK_TABLE = """
 CREATE TABLE IF NOT EXISTS paper_feedback (
     feedback_id UUID PRIMARY KEY,
@@ -75,6 +80,32 @@ CREATE TABLE IF NOT EXISTS paper_feedback (
     label TEXT NOT NULL CHECK (label IN ('like', 'dislike')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+"""
+
+CREATE_RECOMMENDATIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS recommendations (
+    recommendation_id UUID PRIMARY KEY,
+    run_id UUID NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES user_preferences(user_id) ON DELETE CASCADE,
+    arxiv_id TEXT NOT NULL REFERENCES papers(arxiv_id) ON DELETE CASCADE,
+    rank INTEGER NOT NULL CHECK (rank >= 1),
+    final_score DOUBLE PRECISION NOT NULL,
+    candidate_window TEXT NOT NULL,
+    fallback_stage SMALLINT NOT NULL DEFAULT 0,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(run_id, user_id, rank),
+    UNIQUE(run_id, user_id, arxiv_id)
+);
+"""
+
+CREATE_RECOMMENDATIONS_USER_GENERATED_INDEX = """
+CREATE INDEX IF NOT EXISTS recommendations_user_generated_idx
+ON recommendations (user_id, generated_at DESC);
+"""
+
+CREATE_RECOMMENDATIONS_USER_PAPER_GENERATED_INDEX = """
+CREATE INDEX IF NOT EXISTS recommendations_user_paper_generated_idx
+ON recommendations (user_id, arxiv_id, generated_at DESC);
 """
 
 def main():
@@ -86,7 +117,11 @@ def main():
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
             cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
             cur.execute(CREATE_USER_PREFERENCES_TABLE)
+            cur.execute(ALTER_USER_PREFERENCES_ADD_DAILY_K)
             cur.execute(CREATE_PAPER_FEEDBACK_TABLE)
+            cur.execute(CREATE_RECOMMENDATIONS_TABLE)
+            cur.execute(CREATE_RECOMMENDATIONS_USER_GENERATED_INDEX)
+            cur.execute(CREATE_RECOMMENDATIONS_USER_PAPER_GENERATED_INDEX)
 
 if __name__ == "__main__":
     main()

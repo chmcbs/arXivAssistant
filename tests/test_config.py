@@ -46,3 +46,12 @@ def test_get_arxiv_categories_rejects_empty(monkeypatch):
 
     with pytest.raises(ValueError, match="At least one"):
         config.get_arxiv_categories()
+
+def test_get_daily_picks_k_uses_default():
+    assert config.get_daily_picks_k() >= 1
+
+def test_get_daily_picks_k_rejects_invalid_value(monkeypatch):
+    monkeypatch.setattr(config, "DEFAULT_DAILY_K", 0)
+
+    with pytest.raises(ValueError, match="must be >= 1"):
+        config.get_daily_picks_k()
