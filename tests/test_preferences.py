@@ -142,3 +142,25 @@ def test_update_preference_embedding_computes_and_saves_from_feedback(monkeypatc
     assert save_params[1] == "default"
     assert save_params[0].startswith("[")
     assert save_params[0].endswith("]")
+
+def test_update_preference_embedding_handles_string_vectors(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        ("[1.0,1.0]", "[1.0,2.0]", "like"),
+        ("[1.0,1.0]", "[0.5,1.0]", "dislike"),
+    ]
+
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+
+    connect = MagicMock()
+    connect.return_value.__enter__.return_value = connection
+    monkeypatch.setattr(preferences.psycopg, "connect", connect)
+
+    preferences.update_preference_embedding(user_id="default")
+
+    assert cursor.execute.call_count == 2
+    save_params = cursor.execute.call_args_list[1].args[1]
+    assert save_params[1] == "default"
+    assert save_params[0].startswith("[")
+    assert save_params[0].endswith("]")

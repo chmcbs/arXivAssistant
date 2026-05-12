@@ -5,6 +5,19 @@ from config import DEFAULT_USER_ID
 from db_helper import get_database_url
 from vector_helper import vector_literal
 
+def coerce_vector(raw_vector) -> list[float]:
+    if isinstance(raw_vector, str):
+        cleaned = raw_vector.strip()
+        if cleaned.startswith("[") and cleaned.endswith("]"):
+            cleaned = cleaned[1:-1]
+
+        if not cleaned:
+            return []
+
+        return [float(value.strip()) for value in cleaned.split(",") if value.strip()]
+
+    return [float(value) for value in raw_vector]
+
 def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_USER_ID) -> None:
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
@@ -128,15 +141,15 @@ def update_preference_embedding(user_id: str = DEFAULT_USER_ID) -> None:
     if not rows:
         raise ValueError(f"No preference profile found for user_id={user_id}")
 
-    initial_vector = list(rows[0][0])
+    initial_vector = coerce_vector(rows[0][0])
 
     liked_vectors = [
-        list(embedding)
+        coerce_vector(embedding)
         for _, embedding, label in rows
         if embedding is not None and label == "like"
     ]
     disliked_vectors = [
-        list(embedding)
+        coerce_vector(embedding)
         for _, embedding, label in rows
         if embedding is not None and label == "dislike"
     ]
