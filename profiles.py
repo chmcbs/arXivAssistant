@@ -94,7 +94,8 @@ def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
                     profile_slot,
                     category,
                     interest_sentence,
-                    created_at
+                    created_at,
+                    digest_enabled
                 FROM user_profiles
                 WHERE user_id = %s
                 ORDER BY profile_slot ASC;
@@ -111,6 +112,7 @@ def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
             "category": row[3],
             "interest_sentence": row[4],
             "created_at": row[5],
+            "digest_enabled": bool(row[6]),
         }
         for row in rows
     ]
@@ -126,7 +128,8 @@ def get_profile(profile_id: str) -> dict | None:
                     profile_slot,
                     category,
                     interest_sentence,
-                    created_at
+                    created_at,
+                    digest_enabled
                 FROM user_profiles
                 WHERE profile_id = %s;
                 """,
@@ -144,6 +147,7 @@ def get_profile(profile_id: str) -> dict | None:
         "category": row[3],
         "interest_sentence": row[4],
         "created_at": row[5],
+        "digest_enabled": bool(row[6]),
     }
 
 def get_or_create_default_profile(
@@ -297,3 +301,79 @@ def remove_profile_keyword(
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
+
+def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID) -> list[str]:
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT profile_id::text
+                FROM user_profiles
+                WHERE user_id = %s
+                  AND digest_enabled = TRUE
+                ORDER BY profile_slot ASC;
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    return [row[0] for row in rows]
+
+def set_digest_profile_selection(
+    profile_ids: list[str],
+    user_id: str = DEFAULT_USER_ID,
+) -> list[str]:
+    requested_profile_ids = list(dict.fromkeys(profile_ids))
+    if not requested_profile_ids:
+        raise ValueError("at least one profile must be selected for digest generation")
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT profile_id::text
+                FROM user_profiles
+                WHERE user_id = %s
+                  AND profile_id = ANY(%s::uuid[]);
+                """,
+                (user_id, requested_profile_ids),
+            )
+            matched_ids = {row[0] for row in cur.fetchall()}
+            missing_ids = sorted(set(requested_profile_ids) - matched_ids)
+            if missing_ids:
+                raise ValueError("some profile_ids do not belong to user")
+
+            cur.execute(
+                """
+                UPDATE user_profiles
+                SET digest_enabled = FALSE
+                WHERE user_id = %s;
+                """,
+                (user_id,),
+            )
+            cur.execute(
+                """
+                UPDATE user_profiles
+                SET digest_enabled = TRUE
+                WHERE user_id = %s
+                  AND profile_id = ANY(%s::uuid[]);
+                """,
+                (user_id, requested_profile_ids),
+            )
+
+            cur.execute(
+                """
+                SELECT profile_id::text
+                FROM user_profiles
+                WHERE user_id = %s
+                  AND digest_enabled = TRUE
+                ORDER BY profile_slot ASC;
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    selected = [row[0] for row in rows]
+    if not selected:
+        raise ValueError("at least one profile must be selected for digest generation")
+    return selected

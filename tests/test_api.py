@@ -111,11 +111,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
         SimpleNamespace(run_pipeline=run_pipeline),
     )
     monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
-    monkeypatch.setattr(
-        api,
-        "_resolve_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
-    )
+    monkeypatch.setattr(api, "list_digest_selected_profile_ids", Mock(return_value=["profile-1", "profile-2"]))
     monkeypatch.setattr(
         api,
         "get_daily_picks_payload",
@@ -139,10 +135,11 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
 
     run_pipeline.assert_called_once_with(
         user_id="default",
-        profile_id="profile-1",
+        profile_ids=["profile-1", "profile-2"],
         max_results=123,
         embedding_limit=456,
     )
+    assert payload["generated_profile_ids"] == ["profile-1", "profile-2"]
     assert payload["run_ids"] == ["run-123"]
     assert payload["embedded_count"] == 5
     assert payload["recommendation_counts"] == {"run-123": 2}
@@ -156,6 +153,16 @@ def test_generate_daily_picks_rejects_multiple_categories(monkeypatch):
 
     assert error.value.status_code == 400
     assert "API MVP" in error.value.detail
+
+def test_generate_daily_picks_rejects_when_no_digest_profiles_selected(monkeypatch):
+    monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
+    monkeypatch.setattr(api, "list_digest_selected_profile_ids", Mock(return_value=[]))
+
+    with pytest.raises(HTTPException) as error:
+        api.generate_daily_picks_payload(api.GenerateDailyPicksRequest(user_id="default"))
+
+    assert error.value.status_code == 400
+    assert "at least one profile" in error.value.detail
 
 def test_save_feedback_payload_updates_preferences(monkeypatch):
     monkeypatch.setattr(api, "save_feedback", Mock(return_value="feedback-123"))
@@ -243,6 +250,29 @@ def test_remove_profile_keyword_payload_maps_response(monkeypatch):
         "user_id": "default",
         "profile_id": "profile-1",
         "keywords": ["encoder transformers"],
+    }
+
+def test_update_digest_selection_payload_maps_response(monkeypatch):
+    monkeypatch.setattr(
+        api,
+        "set_digest_profile_selection",
+        Mock(return_value=["profile-2", "profile-3"]),
+    )
+
+    payload = api.update_digest_selection_payload(
+        api.UpdateDigestSelectionRequest(
+            user_id="default",
+            profile_ids=["profile-2", "profile-3"],
+        )
+    )
+
+    api.set_digest_profile_selection.assert_called_once_with(
+        profile_ids=["profile-2", "profile-3"],
+        user_id="default",
+    )
+    assert payload == {
+        "user_id": "default",
+        "selected_profile_ids": ["profile-2", "profile-3"],
     }
 
 def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):

@@ -70,8 +70,8 @@ def test_create_profile_raises_when_user_has_three_profiles(monkeypatch):
 def test_list_profiles_maps_rows_to_dicts(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = [
-        ("p-1", "user-1", 1, "cs.AI", "Interest A", "2026-01-01T00:00:00Z"),
-        ("p-2", "user-1", 2, "cs.CL", "Interest B", "2026-01-02T00:00:00Z"),
+        ("p-1", "user-1", 1, "cs.AI", "Interest A", "2026-01-01T00:00:00Z", True),
+        ("p-2", "user-1", 2, "cs.CL", "Interest B", "2026-01-02T00:00:00Z", False),
     ]
     monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
 
@@ -80,6 +80,8 @@ def test_list_profiles_maps_rows_to_dicts(monkeypatch):
     assert [item["profile_id"] for item in results] == ["p-1", "p-2"]
     assert results[0]["profile_slot"] == 1
     assert results[1]["category"] == "cs.CL"
+    assert results[0]["digest_enabled"] is True
+    assert results[1]["digest_enabled"] is False
 
 def test_get_profile_returns_none_when_not_found(monkeypatch):
     cursor = MagicMock()
@@ -174,3 +176,44 @@ def test_remove_profile_keyword_returns_remaining_list(monkeypatch):
     delete_params = cursor.execute.call_args_list[1].args[1]
     assert delete_params == ("profile-1", "kv cache")
     assert keywords == ["encoder transformers"]
+
+def test_list_digest_selected_profile_ids_returns_slot_order(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [("p-2",), ("p-3",)]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    selected = profiles.list_digest_selected_profile_ids(user_id="user-1")
+
+    assert selected == ["p-2", "p-3"]
+
+def test_set_digest_profile_selection_rejects_empty_list():
+    with pytest.raises(ValueError, match="at least one profile"):
+        profiles.set_digest_profile_selection(profile_ids=[], user_id="user-1")
+
+def test_set_digest_profile_selection_updates_selected_profiles(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.side_effect = [
+        [("p-1",), ("p-3",)],  # ownership validation
+        [("p-1",), ("p-3",)],  # selected after update
+    ]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    selected = profiles.set_digest_profile_selection(
+        profile_ids=["p-1", "p-3", "p-1"],
+        user_id="user-1",
+    )
+
+    assert selected == ["p-1", "p-3"]
+    ownership_params = cursor.execute.call_args_list[0].args[1]
+    assert ownership_params == ("user-1", ["p-1", "p-3"])
+
+def test_set_digest_profile_selection_rejects_non_owned_profiles(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [("p-1",)]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    with pytest.raises(ValueError, match="do not belong"):
+        profiles.set_digest_profile_selection(
+            profile_ids=["p-1", "p-2"],
+            user_id="user-1",
+        )

@@ -60,6 +60,11 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=3))
     monkeypatch.setattr(
         pipeline,
+        "get_or_create_default_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
+    monkeypatch.setattr(
+        pipeline,
         "generate_recommendations",
         Mock(side_effect=[RuntimeError("boom"), [{"rank": 1}]]),
     )
@@ -69,4 +74,33 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     assert summary["recommendations_by_run"] == {
         "run-1": [],
         "run-2": [{"rank": 1}],
+    }
+
+def test_run_pipeline_generates_for_multiple_profiles(monkeypatch):
+    monkeypatch.setattr(pipeline, "setup_database", Mock())
+    monkeypatch.setattr(pipeline, "run_ingestion", Mock(return_value=["run-1"]))
+    monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=2))
+    monkeypatch.setattr(
+        pipeline,
+        "generate_recommendations",
+        Mock(side_effect=[[{"rank": 1}], [{"rank": 1}, {"rank": 2}]]),
+    )
+
+    summary = pipeline.run_pipeline(
+        user_id="default",
+        profile_ids=["profile-1", "profile-2"],
+    )
+
+    assert summary["recommendations_by_run_profile"] == {
+        "run-1": {
+            "profile-1": [{"rank": 1}],
+            "profile-2": [{"rank": 1}, {"rank": 2}],
+        }
+    }
+    assert summary["recommendations_by_run"] == {
+        "run-1": [
+            {"profile_id": "profile-1", "rank": 1},
+            {"profile_id": "profile-2", "rank": 1},
+            {"profile_id": "profile-2", "rank": 2},
+        ]
     }

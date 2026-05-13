@@ -14,8 +14,10 @@ from profiles import (
     add_profile_keyword,
     create_profile,
     get_or_create_default_profile,
+    list_digest_selected_profile_ids,
     list_profile_keywords,
     remove_profile_keyword,
+    set_digest_profile_selection,
 )
 
 app = FastAPI(title="arXiv Assistant API")
@@ -96,6 +98,7 @@ SELECT
     p.profile_slot,
     p.category,
     p.interest_sentence,
+    p.digest_enabled,
     p.created_at,
     pp.updated_at,
     COALESCE(
@@ -136,6 +139,7 @@ class ProfileSummary(BaseModel):
     profile_slot: int
     category: str
     interest_sentence: str
+    digest_enabled: bool
     keywords: list[str]
     created_at: datetime
     preference_updated_at: datetime | None = None
@@ -164,6 +168,7 @@ class GenerateDailyPicksRequest(BaseModel):
 class GenerateDailyPicksResponse(BaseModel):
     user_id: str
     profile_id: str
+    generated_profile_ids: list[str]
     run_ids: list[str]
     embedded_count: int
     recommendation_counts: dict[str, int]
@@ -204,6 +209,14 @@ class ManageProfileKeywordResponse(BaseModel):
     user_id: str
     profile_id: str
     keywords: list[str]
+
+class UpdateDigestSelectionRequest(BaseModel):
+    user_id: str = DEFAULT_USER_ID
+    profile_ids: list[str]
+
+class UpdateDigestSelectionResponse(BaseModel):
+    user_id: str
+    selected_profile_ids: list[str]
 
 def _resolve_profile(user_id: str, profile_id: str | None) -> dict:
     if profile_id:
@@ -312,31 +325,50 @@ def _ensure_single_category_mvp() -> None:
 
 def generate_daily_picks_payload(request: GenerateDailyPicksRequest) -> dict:
     _ensure_single_category_mvp()
-    profile = _resolve_profile(user_id=request.user_id, profile_id=request.profile_id)
-    resolved_profile_id = str(profile["profile_id"])
+    if request.profile_id is not None:
+        profile = _resolve_profile(user_id=request.user_id, profile_id=request.profile_id)
+        target_profile_ids = [str(profile["profile_id"])]
+    else:
+        target_profile_ids = list_digest_selected_profile_ids(user_id=request.user_id)
+        if not target_profile_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="at least one profile must be selected for digest generation",
+            )
+
+    primary_profile_id = target_profile_ids[0]
 
     from pipeline import run_pipeline
 
     summary = run_pipeline(
         user_id=request.user_id,
-        profile_id=resolved_profile_id,
+        profile_ids=target_profile_ids,
         max_results=request.max_results,
         embedding_limit=request.embedding_limit,
     )
     picks_payload = get_daily_picks_payload(
         user_id=request.user_id,
-        profile_id=resolved_profile_id,
+        profile_id=primary_profile_id,
     )
+
+    recommendations_by_run_profile = summary.get("recommendations_by_run_profile", {})
+    recommendation_counts = {
+        run_id: sum(len(profile_rows) for profile_rows in profile_map.values())
+        for run_id, profile_map in recommendations_by_run_profile.items()
+    }
+    if not recommendation_counts:
+        recommendation_counts = {
+            run_id: len(recommendations)
+            for run_id, recommendations in summary["recommendations_by_run"].items()
+        }
 
     return {
         "user_id": request.user_id,
-        "profile_id": resolved_profile_id,
+        "profile_id": primary_profile_id,
+        "generated_profile_ids": target_profile_ids,
         "run_ids": summary["run_ids"],
         "embedded_count": summary["embedded_count"],
-        "recommendation_counts": {
-            run_id: len(recommendations)
-            for run_id, recommendations in summary["recommendations_by_run"].items()
-        },
+        "recommendation_counts": recommendation_counts,
         "needs_generation": picks_payload["needs_generation"],
         "picks": picks_payload["picks"],
     }
@@ -401,12 +433,27 @@ def list_profiles_payload(user_id: str = DEFAULT_USER_ID) -> dict:
                 "profile_slot": int(row[2]),
                 "category": row[3],
                 "interest_sentence": row[4],
-                "created_at": row[5],
-                "preference_updated_at": row[6],
-                "keywords": list(row[7] or []),
+                "digest_enabled": bool(row[5]),
+                "created_at": row[6],
+                "preference_updated_at": row[7],
+                "keywords": list(row[8] or []),
             }
             for row in rows
         ],
+    }
+
+def update_digest_selection_payload(request: UpdateDigestSelectionRequest) -> dict:
+    try:
+        selected_profile_ids = set_digest_profile_selection(
+            profile_ids=request.profile_ids,
+            user_id=request.user_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {
+        "user_id": request.user_id,
+        "selected_profile_ids": selected_profile_ids,
     }
 
 def add_profile_keyword_payload(
@@ -553,6 +600,10 @@ def profiles_keywords_remove(
     request: ManageProfileKeywordRequest,
 ) -> dict:
     return remove_profile_keyword_payload(profile_id=profile_id, request=request)
+
+@app.put("/profiles/digest-selection", response_model=UpdateDigestSelectionResponse)
+def profiles_digest_selection_update(request: UpdateDigestSelectionRequest) -> dict:
+    return update_digest_selection_payload(request)
 
 @app.get("/metrics")
 def metrics(latest_runs_limit: int = 10) -> dict:

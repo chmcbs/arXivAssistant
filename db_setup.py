@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     profile_slot SMALLINT NOT NULL CHECK (profile_slot BETWEEN 1 AND 3),
     category TEXT NOT NULL,
     interest_sentence TEXT NOT NULL,
+    digest_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, profile_slot)
@@ -88,6 +89,11 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 CREATE_USER_PROFILES_USER_INDEX = """
 CREATE INDEX IF NOT EXISTS user_profiles_user_created_idx
 ON user_profiles (user_id, created_at ASC);
+"""
+
+ALTER_USER_PROFILES_ADD_DIGEST_ENABLED = """
+ALTER TABLE user_profiles
+ADD COLUMN IF NOT EXISTS digest_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 """
 
 ########################################
@@ -184,6 +190,7 @@ def main():
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
             cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
             cur.execute(CREATE_USER_PROFILES_TABLE)
+            cur.execute(ALTER_USER_PROFILES_ADD_DIGEST_ENABLED)
             cur.execute(CREATE_USER_PROFILES_USER_INDEX)
             cur.execute(CREATE_PROFILE_PREFERENCES_TABLE)
             cur.execute(CREATE_PROFILE_KEYWORDS_TABLE)
