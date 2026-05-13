@@ -37,11 +37,17 @@ def test_get_daily_picks_returns_empty_state(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = []
     monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
+    monkeypatch.setattr(
+        api,
+        "_resolve_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
 
     payload = api.get_daily_picks_payload(user_id="default")
 
     assert payload == {
         "user_id": "default",
+        "profile_id": "profile-1",
         "needs_generation": True,
         "picks": [],
     }
@@ -50,6 +56,11 @@ def test_get_daily_picks_returns_public_fields(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = [_pick_row()]
     monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
+    monkeypatch.setattr(
+        api,
+        "_resolve_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
 
     payload = api.get_daily_picks_payload(user_id="default")
 
@@ -68,6 +79,11 @@ def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = [_pick_row()]
     monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
+    monkeypatch.setattr(
+        api,
+        "_resolve_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
 
     payload = api.get_debug_daily_picks_payload(user_id="default")
 
@@ -93,10 +109,16 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
     monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
     monkeypatch.setattr(
         api,
+        "_resolve_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
+    monkeypatch.setattr(
+        api,
         "get_daily_picks_payload",
         Mock(
             return_value={
                 "user_id": "default",
+                "profile_id": "profile-1",
                 "needs_generation": False,
                 "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
             }
@@ -113,6 +135,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
 
     run_pipeline.assert_called_once_with(
         user_id="default",
+        profile_id="profile-1",
         max_results=123,
         embedding_limit=456,
     )
@@ -133,6 +156,11 @@ def test_generate_daily_picks_rejects_multiple_categories(monkeypatch):
 def test_save_feedback_payload_updates_preferences(monkeypatch):
     monkeypatch.setattr(api, "save_feedback", Mock(return_value="feedback-123"))
     monkeypatch.setattr(api, "update_preference_embedding", Mock())
+    monkeypatch.setattr(
+        api,
+        "_resolve_profile",
+        Mock(return_value={"profile_id": "profile-1"}),
+    )
 
     payload = api.save_feedback_payload(
         api.FeedbackRequest(
@@ -146,11 +174,16 @@ def test_save_feedback_payload_updates_preferences(monkeypatch):
         arxiv_id="2601.00001",
         label="like",
         user_id="default",
+        profile_id="profile-1",
     )
-    api.update_preference_embedding.assert_called_once_with(user_id="default")
+    api.update_preference_embedding.assert_called_once_with(
+        user_id="default",
+        profile_id="profile-1",
+    )
     assert payload == {
         "feedback_id": "feedback-123",
         "user_id": "default",
+        "profile_id": "profile-1",
         "arxiv_id": "2601.00001",
         "label": "like",
         "preference_updated": True,
@@ -173,7 +206,7 @@ def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):
                 None,
             )
         ],
-        [("default", 3)],
+        [("profile-1", 3)],
     ]
     cursor.fetchone.return_value = (3,)
     monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
@@ -183,4 +216,4 @@ def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):
     assert payload["run_status_counts"] == {"completed": 2, "failed": 1}
     assert payload["latest_runs"][0]["run_id"] == "run-123"
     assert payload["total_recommendations"] == 3
-    assert payload["recommendations_by_user"] == {"default": 3}
+    assert payload["recommendations_by_profile"] == {"profile-1": 3}

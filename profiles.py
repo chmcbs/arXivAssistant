@@ -1,0 +1,165 @@
+"""
+User profile model and helpers
+"""
+
+import uuid
+import psycopg
+from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
+from db_helper import get_database_url
+
+MAX_PROFILES_PER_USER = 3
+
+def _validate_interest_sentence(interest_sentence: str) -> str:
+    value = interest_sentence.strip()
+    if not value:
+        raise ValueError("interest_sentence must not be empty")
+    return value
+
+def _validate_category(category: str) -> str:
+    value = category.strip()
+    if not value:
+        raise ValueError("category must not be empty")
+    allowed_categories = set(get_arxiv_categories())
+    if value not in allowed_categories:
+        raise ValueError(
+            "category must be one of configured ARXIV_CATEGORIES: "
+            + ", ".join(sorted(allowed_categories))
+        )
+    return value
+
+def _pick_next_available_slot(occupied_slots: set[int]) -> int:
+    for slot in range(1, MAX_PROFILES_PER_USER + 1):
+        if slot not in occupied_slots:
+            return slot
+    raise ValueError(f"user has reached the {MAX_PROFILES_PER_USER}-profile cap")
+
+def create_profile(
+    user_id: str = DEFAULT_USER_ID,
+    category: str | None = None,
+    interest_sentence: str = DEFAULT_INTEREST_TEXT,
+) -> str:
+    validated_interest = _validate_interest_sentence(interest_sentence)
+    validated_category = _validate_category(
+        category or get_arxiv_categories()[0]
+    )
+    profile_id = str(uuid.uuid4())
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT profile_slot
+                FROM user_profiles
+                WHERE user_id = %s
+                ORDER BY profile_slot ASC
+                FOR UPDATE;
+                """,
+                (user_id,),
+            )
+            occupied_slots = {int(row[0]) for row in cur.fetchall()}
+
+            profile_slot = _pick_next_available_slot(occupied_slots)
+
+            cur.execute(
+                """
+                INSERT INTO user_profiles (
+                    profile_id,
+                    user_id,
+                    profile_slot,
+                    category,
+                    interest_sentence
+                )
+                VALUES (%s, %s, %s, %s, %s);
+                """,
+                (
+                    profile_id,
+                    user_id,
+                    profile_slot,
+                    validated_category,
+                    validated_interest,
+                ),
+            )
+
+    return profile_id
+
+def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    profile_id::text,
+                    user_id,
+                    profile_slot,
+                    category,
+                    interest_sentence,
+                    created_at
+                FROM user_profiles
+                WHERE user_id = %s
+                ORDER BY profile_slot ASC;
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    return [
+        {
+            "profile_id": row[0],
+            "user_id": row[1],
+            "profile_slot": int(row[2]),
+            "category": row[3],
+            "interest_sentence": row[4],
+            "created_at": row[5],
+        }
+        for row in rows
+    ]
+
+def get_profile(profile_id: str) -> dict | None:
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    profile_id::text,
+                    user_id,
+                    profile_slot,
+                    category,
+                    interest_sentence,
+                    created_at
+                FROM user_profiles
+                WHERE profile_id = %s;
+                """,
+                (profile_id,),
+            )
+            row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "profile_id": row[0],
+        "user_id": row[1],
+        "profile_slot": int(row[2]),
+        "category": row[3],
+        "interest_sentence": row[4],
+        "created_at": row[5],
+    }
+
+def get_or_create_default_profile(
+    user_id: str = DEFAULT_USER_ID,
+    category: str | None = None,
+    interest_sentence: str = DEFAULT_INTEREST_TEXT,
+) -> dict:
+    profiles = list_profiles(user_id=user_id)
+    if profiles:
+        return profiles[0]
+
+    profile_id = create_profile(
+        user_id=user_id,
+        category=category,
+        interest_sentence=interest_sentence,
+    )
+    profile = get_profile(profile_id)
+    if profile is None:
+        raise ValueError("failed to create default profile")
+    return profile

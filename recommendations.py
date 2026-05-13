@@ -1,11 +1,12 @@
 """
-Generates top-K recommendations per (run_id, user_id)
+Generates top-K recommendations per (run_id, profile_id)
 """
 
 import uuid
 import psycopg
 from config import DEFAULT_USER_ID, get_daily_picks_k
 from db_helper import get_database_url
+from profiles import get_or_create_default_profile
 
 FETCH_RUN_SQL = """
 SELECT run_id, category, max_results
@@ -16,8 +17,8 @@ WHERE run_id = %s
 
 FETCH_EFFECTIVE_K_SQL = """
 SELECT COALESCE(daily_k, %s)
-FROM user_preferences
-WHERE user_id = %s;
+FROM profile_preferences
+WHERE profile_id = %s;
 """
 
 RANK_CANDIDATES_SQL = """
@@ -29,19 +30,19 @@ WITH run_context AS (
 ),
 preference_context AS (
     SELECT preference_embedding
-    FROM user_preferences
-    WHERE user_id = %s
+    FROM profile_preferences
+    WHERE profile_id = %s
 ),
 feedback_excluded AS (
     SELECT DISTINCT arxiv_id
     FROM paper_feedback
-    WHERE user_id = %s
+    WHERE profile_id = %s
       AND label IN ('like', 'dislike')
 ),
 seen_papers AS (
     SELECT DISTINCT arxiv_id
     FROM recommendations
-    WHERE user_id = %s
+    WHERE profile_id = %s
 ),
 base_papers AS (
     SELECT
@@ -236,14 +237,14 @@ ORDER BY rank ASC;
 DELETE_EXISTING_SQL = """
 DELETE FROM recommendations
 WHERE run_id = %s
-  AND user_id = %s;
+  AND profile_id = %s;
 """
 
 INSERT_RECOMMENDATION_SQL = """
 INSERT INTO recommendations (
     recommendation_id,
     run_id,
-    user_id,
+    profile_id,
     arxiv_id,
     rank,
     final_score,
@@ -255,18 +256,28 @@ VALUES (
 );
 """
 
+def _resolve_profile_id(
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+) -> str:
+    if profile_id:
+        return profile_id
+
+    profile = get_or_create_default_profile(user_id=user_id)
+    return str(profile["profile_id"])
+
 # Resolve the number of items to return (override > user preference > default)
-def _get_effective_k(cur, user_id: str, k_override: int | None) -> int:
+def _get_effective_k(cur, profile_id: str, k_override: int | None) -> int:
     if k_override is not None:
         if k_override < 1:
             raise ValueError("k_override must be >= 1")
         return k_override
 
     default_k = get_daily_picks_k()
-    cur.execute(FETCH_EFFECTIVE_K_SQL, (default_k, user_id))
+    cur.execute(FETCH_EFFECTIVE_K_SQL, (default_k, profile_id))
     row = cur.fetchone()
     if row is None:
-        raise ValueError(f"No preference profile found for user_id={user_id}")
+        raise ValueError(f"No preference profile found for profile_id={profile_id}")
 
     return int(row[0])
 
@@ -281,26 +292,29 @@ def _ensure_completed_run(cur, run_id: str) -> tuple[str, str, int]:
 def generate_recommendations(
     run_id: str,
     user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
     k_override: int | None = None,
 ) -> list[dict]:
+    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
+
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             _ensure_completed_run(cur, run_id)
-            effective_k = _get_effective_k(cur, user_id, k_override)
+            effective_k = _get_effective_k(cur, resolved_profile_id, k_override)
 
             cur.execute(
                 RANK_CANDIDATES_SQL,
-                (run_id, user_id, user_id, user_id, effective_k),
+                (run_id, resolved_profile_id, resolved_profile_id, resolved_profile_id, effective_k),
             )
             rows = cur.fetchall()
 
-            cur.execute(DELETE_EXISTING_SQL, (run_id, user_id))
+            cur.execute(DELETE_EXISTING_SQL, (run_id, resolved_profile_id))
 
             inserts = [
                 (
                     str(uuid.uuid4()),
                     run_id,
-                    user_id,
+                    resolved_profile_id,
                     row[1],
                     int(row[0]),
                     float(row[6]),
@@ -330,11 +344,16 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        raise SystemExit("Usage: python recommendations.py <run_id> [user_id]")
+        raise SystemExit("Usage: python recommendations.py <run_id> [user_id] [profile_id]")
 
     cli_run_id = sys.argv[1]
     cli_user_id = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_USER_ID
-    generated = generate_recommendations(cli_run_id, user_id=cli_user_id)
+    cli_profile_id = sys.argv[3] if len(sys.argv) > 3 else None
+    generated = generate_recommendations(
+        cli_run_id,
+        user_id=cli_user_id,
+        profile_id=cli_profile_id,
+    )
 
     for row in generated:
         print(

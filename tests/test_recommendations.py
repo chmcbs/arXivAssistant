@@ -1,6 +1,7 @@
 """
 Tests recommendation generation and persistence
 """
+
 from unittest.mock import MagicMock, Mock
 import pytest
 import recommendations
@@ -20,7 +21,11 @@ def test_generate_recommendations_requires_completed_run(monkeypatch):
     monkeypatch.setattr(recommendations.psycopg, "connect", connect)
 
     with pytest.raises(ValueError, match="must exist and be completed"):
-        recommendations.generate_recommendations("run-123", user_id="default")
+        recommendations.generate_recommendations(
+            "run-123",
+            user_id="default",
+            profile_id="profile-1",
+        )
 
 def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     cursor = MagicMock()
@@ -58,7 +63,11 @@ def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
         Mock(side_effect=["rec-1", "rec-2"]),
     )
 
-    results = recommendations.generate_recommendations("run-123", user_id="default")
+    results = recommendations.generate_recommendations(
+        "run-123",
+        user_id="default",
+        profile_id="profile-1",
+    )
 
     assert [result["rank"] for result in results] == [1, 2]
     assert [result["arxiv_id"] for result in results] == ["2601.00001", "2601.00002"]
@@ -66,7 +75,7 @@ def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     assert cursor.execute.call_count == 4
 
     delete_params = cursor.execute.call_args_list[3].args[1]
-    assert delete_params == ("run-123", "default")
+    assert delete_params == ("run-123", "profile-1")
 
     inserted_rows = cursor.executemany.call_args.args[1]
     assert inserted_rows[0][0] == "rec-1"
@@ -88,11 +97,12 @@ def test_generate_recommendations_respects_k_override(monkeypatch):
     recommendations.generate_recommendations(
         "run-123",
         user_id="default",
+        profile_id="profile-1",
         k_override=2,
     )
 
     rank_params = cursor.execute.call_args_list[1].args[1]
-    assert rank_params == ("run-123", "default", "default", "default", 2)
+    assert rank_params == ("run-123", "profile-1", "profile-1", "profile-1", 2)
 
 def test_generate_recommendations_rejects_invalid_override(monkeypatch):
     cursor = MagicMock()
@@ -105,5 +115,6 @@ def test_generate_recommendations_rejects_invalid_override(monkeypatch):
         recommendations.generate_recommendations(
             "run-123",
             user_id="default",
+            profile_id="profile-1",
             k_override=0,
         )

@@ -27,12 +27,15 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         pipeline,
         "generate_recommendations",
         Mock(
-            side_effect=lambda run_id, user_id: calls.append(("generate_recommendations", run_id, user_id)) or [{"rank": 1}]
+            side_effect=lambda run_id, user_id, profile_id: calls.append(
+                ("generate_recommendations", run_id, user_id, profile_id)
+            ) or [{"rank": 1}]
         ),
     )
 
     summary = pipeline.run_pipeline(
         user_id="default",
+        profile_id="profile-1",
         max_results=123,
         embedding_limit=456,
     )
@@ -41,8 +44,8 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         "setup_database",
         ("run_ingestion", 123),
         ("run_embeddings", 456),
-        ("generate_recommendations", "run-1", "default"),
-        ("generate_recommendations", "run-2", "default"),
+        ("generate_recommendations", "run-1", "default", "profile-1"),
+        ("generate_recommendations", "run-2", "default", "profile-1"),
     ]
     assert summary["run_ids"] == ["run-1", "run-2"]
     assert summary["embedded_count"] == 5

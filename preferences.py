@@ -7,6 +7,7 @@ from embeddings import embed_texts
 import uuid
 from config import DEFAULT_USER_ID
 from db_helper import get_database_url
+from profiles import get_or_create_default_profile
 from vector_helper import vector_literal
 
 # Convert pgvector strings to lists
@@ -23,13 +24,28 @@ def coerce_vector(raw_vector) -> list[float]:
 
     return [float(value) for value in raw_vector]
 
+def _resolve_profile_id(
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+) -> str:
+    if profile_id:
+        return profile_id
+
+    profile = get_or_create_default_profile(user_id=user_id)
+    return str(profile["profile_id"])
+
 # Cold start preference embedding
-def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_USER_ID) -> None:
+def initialize_preference_embedding(
+    interest_text: str,
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+) -> str:
+    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
     sql = """
-    INSERT INTO user_preferences (
-        user_id,
+    INSERT INTO profile_preferences (
+        profile_id,
         initial_interest_embedding,
         preference_embedding
     )
@@ -38,7 +54,7 @@ def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_U
         %s::vector,
         %s::vector
     )
-    ON CONFLICT (user_id)
+    ON CONFLICT (profile_id)
     DO UPDATE SET
         initial_interest_embedding = EXCLUDED.initial_interest_embedding,
         preference_embedding = EXCLUDED.preference_embedding,
@@ -47,27 +63,38 @@ def initialize_preference_embedding(interest_text: str, user_id: str = DEFAULT_U
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (user_id, preference_vector, preference_vector))
+            cur.execute(
+                sql,
+                (
+                    resolved_profile_id,
+                    preference_vector,
+                    preference_vector,
+                ),
+            )
+
+    return resolved_profile_id
 
 def save_feedback(
     arxiv_id: str,
     label: str,
     user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
 ) -> str:
     if label not in {"like", "dislike"}:
         raise ValueError("label must be 'like' or 'dislike'")
 
+    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
     feedback_id = str(uuid.uuid4())
 
     sql = """
     INSERT INTO paper_feedback (
         feedback_id,
-        user_id,
+        profile_id,
         arxiv_id,
         label
     )
     VALUES (%s, %s, %s, %s)
-    ON CONFLICT (user_id, arxiv_id)
+    ON CONFLICT (profile_id, arxiv_id)
     DO UPDATE SET
         label = EXCLUDED.label,
         created_at = NOW()
@@ -76,7 +103,7 @@ def save_feedback(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (feedback_id, user_id, arxiv_id, label))
+            cur.execute(sql, (feedback_id, resolved_profile_id, arxiv_id, label))
             row = cur.fetchone()
 
     return str(row[0])
@@ -137,25 +164,29 @@ def compute_preference_vector(
         for liked_value, disliked_value in zip(liked_mean, disliked_mean)
     ]
 
-def update_preference_embedding(user_id: str = DEFAULT_USER_ID) -> None:
+def update_preference_embedding(
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+) -> None:
+    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
     sql = """
     SELECT
-        up.initial_interest_embedding,
+        pp.initial_interest_embedding,
         e.embedding,
         f.label
-    FROM user_preferences up
-    LEFT JOIN paper_feedback f ON f.user_id = up.user_id
+    FROM profile_preferences pp
+    LEFT JOIN paper_feedback f ON f.profile_id = pp.profile_id
     LEFT JOIN paper_embeddings e ON e.arxiv_id = f.arxiv_id
-    WHERE up.user_id = %s;
+    WHERE pp.profile_id = %s;
     """
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (user_id,))
+            cur.execute(sql, (resolved_profile_id,))
             rows = cur.fetchall()
 
     if not rows:
-        raise ValueError(f"No preference profile found for user_id={user_id}")
+        raise ValueError(f"No preference profile found for profile_id={resolved_profile_id}")
 
     initial_vector = coerce_vector(rows[0][0])
 
@@ -190,12 +221,12 @@ def update_preference_embedding(user_id: str = DEFAULT_USER_ID) -> None:
     preference_vector_literal = vector_literal(preference_vector)
 
     save_sql = """
-    UPDATE user_preferences
+    UPDATE profile_preferences
     SET preference_embedding = %s::vector,
         updated_at = NOW()
-    WHERE user_id = %s;
+    WHERE profile_id = %s;
     """
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(save_sql, (preference_vector_literal, user_id))
+            cur.execute(save_sql, (preference_vector_literal, resolved_profile_id))

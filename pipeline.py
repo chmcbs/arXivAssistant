@@ -10,6 +10,7 @@ from recommendations import generate_recommendations
 
 def run_pipeline(
     user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
     max_results: int = 150,
     embedding_limit: int = 600,
 ) -> dict:
@@ -28,7 +29,11 @@ def run_pipeline(
     recommendations_by_run = {}
     for run_id in run_ids:
         try:
-            recommendations = generate_recommendations(run_id, user_id=user_id)
+            recommendations = generate_recommendations(
+                run_id,
+                user_id=user_id,
+                profile_id=profile_id,
+            )
             recommendations_by_run[run_id] = recommendations
             print(f"Run {run_id}: saved {len(recommendations)} recommendation(s)")
         except Exception as error:

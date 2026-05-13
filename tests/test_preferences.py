@@ -71,7 +71,7 @@ def test_compute_preference_vector_requires_liked_vector():
 
 def test_save_feedback_rejects_invalid_label():
     with pytest.raises(ValueError, match="label must be 'like' or 'dislike'"):
-        preferences.save_feedback("2401.12345", "maybe")
+        preferences.save_feedback("2401.12345", "maybe", profile_id="profile-1")
 
 def test_save_feedback_upserts_database_row(monkeypatch):
     monkeypatch.setattr(preferences.uuid, "uuid4", Mock(return_value="feedback-123"))
@@ -89,15 +89,16 @@ def test_save_feedback_upserts_database_row(monkeypatch):
         arxiv_id="2401.12345",
         label="like",
         user_id="default",
+        profile_id="profile-1",
     )
 
     assert feedback_id == "feedback-123"
     cursor.execute.assert_called_once()
     query = cursor.execute.call_args.args[0]
     params = cursor.execute.call_args.args[1]
-    assert "ON CONFLICT (user_id, arxiv_id)" in query
+    assert "ON CONFLICT (profile_id, arxiv_id)" in query
     assert "RETURNING feedback_id" in query
-    assert params == ("feedback-123", "default", "2401.12345", "like")
+    assert params == ("feedback-123", "profile-1", "2401.12345", "like")
 
 def test_initialize_preference_embedding_embeds_and_saves_interest_text(monkeypatch):
     monkeypatch.setattr(preferences, "embed_texts", Mock(return_value=[[0.1, 0.2]]))
@@ -113,12 +114,13 @@ def test_initialize_preference_embedding_embeds_and_saves_interest_text(monkeypa
     preferences.initialize_preference_embedding(
         interest_text="language agents",
         user_id="default",
+        profile_id="profile-1",
     )
 
     preferences.embed_texts.assert_called_once_with(["language agents"])
     cursor.execute.assert_called_once()
     params = cursor.execute.call_args.args[1]
-    assert params == ("default", "[0.1,0.2]", "[0.1,0.2]")
+    assert params == ("profile-1", "[0.1,0.2]", "[0.1,0.2]")
 
 def test_update_preference_embedding_computes_and_saves_from_feedback(monkeypatch):
     cursor = MagicMock()
@@ -135,15 +137,15 @@ def test_update_preference_embedding_computes_and_saves_from_feedback(monkeypatc
     connect.return_value.__enter__.return_value = connection
     monkeypatch.setattr(preferences.psycopg, "connect", connect)
 
-    preferences.update_preference_embedding(user_id="default")
+    preferences.update_preference_embedding(user_id="default", profile_id="profile-1")
 
     assert cursor.execute.call_count == 2
 
     fetch_params = cursor.execute.call_args_list[0].args[1]
     save_params = cursor.execute.call_args_list[1].args[1]
 
-    assert fetch_params == ("default",)
-    assert save_params[1] == "default"
+    assert fetch_params == ("profile-1",)
+    assert save_params[1] == "profile-1"
     assert save_params[0].startswith("[")
     assert save_params[0].endswith("]")
 
@@ -161,10 +163,10 @@ def test_update_preference_embedding_handles_string_vectors(monkeypatch):
     connect.return_value.__enter__.return_value = connection
     monkeypatch.setattr(preferences.psycopg, "connect", connect)
 
-    preferences.update_preference_embedding(user_id="default")
+    preferences.update_preference_embedding(user_id="default", profile_id="profile-1")
 
     assert cursor.execute.call_count == 2
     save_params = cursor.execute.call_args_list[1].args[1]
-    assert save_params[1] == "default"
+    assert save_params[1] == "profile-1"
     assert save_params[0].startswith("[")
     assert save_params[0].endswith("]")

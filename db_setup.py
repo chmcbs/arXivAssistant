@@ -71,36 +71,54 @@ CREATE TABLE IF NOT EXISTS paper_embeddings (
 """
 
 ########################################
-####### PREFERENCES & FEEDBACK #########
+############### PROFILES ###############
 ########################################
 
-CREATE_USER_PREFERENCES_TABLE = """
-CREATE TABLE IF NOT EXISTS user_preferences (
-    user_id TEXT PRIMARY KEY,
-    initial_interest_embedding vector(384) NOT NULL,
-    preference_embedding vector(384) NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE_USER_PROFILES_TABLE = """
+CREATE TABLE IF NOT EXISTS user_profiles (
+    profile_id UUID PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    profile_slot SMALLINT NOT NULL CHECK (profile_slot BETWEEN 1 AND 3),
+    category TEXT NOT NULL,
+    interest_sentence TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, profile_slot)
 );
 """
 
-ALTER_USER_PREFERENCES_ADD_DAILY_K = """
-ALTER TABLE user_preferences
-ADD COLUMN IF NOT EXISTS daily_k INTEGER CHECK (daily_k >= 1);
+CREATE_USER_PROFILES_USER_INDEX = """
+CREATE INDEX IF NOT EXISTS user_profiles_user_created_idx
+ON user_profiles (user_id, created_at ASC);
+"""
+
+########################################
+####### PREFERENCES & FEEDBACK #########
+########################################
+
+CREATE_PROFILE_PREFERENCES_TABLE = """
+CREATE TABLE IF NOT EXISTS profile_preferences (
+    profile_id UUID PRIMARY KEY REFERENCES user_profiles(profile_id) ON DELETE CASCADE,
+    initial_interest_embedding vector(384) NOT NULL,
+    preference_embedding vector(384) NOT NULL,
+    daily_k INTEGER CHECK (daily_k >= 1),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 CREATE_PAPER_FEEDBACK_TABLE = """
 CREATE TABLE IF NOT EXISTS paper_feedback (
     feedback_id UUID PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES user_preferences(user_id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL REFERENCES user_profiles(profile_id) ON DELETE CASCADE,
     arxiv_id TEXT NOT NULL REFERENCES papers(arxiv_id) ON DELETE CASCADE,
     label TEXT NOT NULL CHECK (label IN ('like', 'dislike')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 """
 
-CREATE_PAPER_FEEDBACK_USER_PAPER_INDEX = """
-CREATE UNIQUE INDEX IF NOT EXISTS paper_feedback_user_paper_idx
-ON paper_feedback (user_id, arxiv_id);
+CREATE_PAPER_FEEDBACK_PROFILE_PAPER_INDEX = """
+CREATE UNIQUE INDEX IF NOT EXISTS paper_feedback_profile_paper_idx
+ON paper_feedback (profile_id, arxiv_id);
 """
 
 ########################################
@@ -111,26 +129,26 @@ CREATE_RECOMMENDATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS recommendations (
     recommendation_id UUID PRIMARY KEY,
     run_id UUID NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES user_preferences(user_id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL REFERENCES user_profiles(profile_id) ON DELETE CASCADE,
     arxiv_id TEXT NOT NULL REFERENCES papers(arxiv_id) ON DELETE CASCADE,
     rank INTEGER NOT NULL CHECK (rank >= 1),
     final_score DOUBLE PRECISION NOT NULL,
     candidate_window TEXT NOT NULL,
     fallback_stage SMALLINT NOT NULL DEFAULT 0,
     generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(run_id, user_id, rank),
-    UNIQUE(run_id, user_id, arxiv_id)
+    UNIQUE(run_id, profile_id, rank),
+    UNIQUE(run_id, profile_id, arxiv_id)
 );
 """
 
-CREATE_RECOMMENDATIONS_USER_GENERATED_INDEX = """
-CREATE INDEX IF NOT EXISTS recommendations_user_generated_idx
-ON recommendations (user_id, generated_at DESC);
+CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX = """
+CREATE INDEX IF NOT EXISTS recommendations_profile_generated_idx
+ON recommendations (profile_id, generated_at DESC);
 """
 
-CREATE_RECOMMENDATIONS_USER_PAPER_GENERATED_INDEX = """
-CREATE INDEX IF NOT EXISTS recommendations_user_paper_generated_idx
-ON recommendations (user_id, arxiv_id, generated_at DESC);
+CREATE_RECOMMENDATIONS_PROFILE_PAPER_GENERATED_INDEX = """
+CREATE INDEX IF NOT EXISTS recommendations_profile_paper_generated_idx
+ON recommendations (profile_id, arxiv_id, generated_at DESC);
 """
 
 def main():
@@ -141,13 +159,14 @@ def main():
             cur.execute(CREATE_RUNS_TABLE)
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
             cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
-            cur.execute(CREATE_USER_PREFERENCES_TABLE)
-            cur.execute(ALTER_USER_PREFERENCES_ADD_DAILY_K)
+            cur.execute(CREATE_USER_PROFILES_TABLE)
+            cur.execute(CREATE_USER_PROFILES_USER_INDEX)
+            cur.execute(CREATE_PROFILE_PREFERENCES_TABLE)
             cur.execute(CREATE_PAPER_FEEDBACK_TABLE)
-            cur.execute(CREATE_PAPER_FEEDBACK_USER_PAPER_INDEX)
+            cur.execute(CREATE_PAPER_FEEDBACK_PROFILE_PAPER_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_TABLE)
-            cur.execute(CREATE_RECOMMENDATIONS_USER_GENERATED_INDEX)
-            cur.execute(CREATE_RECOMMENDATIONS_USER_PAPER_GENERATED_INDEX)
+            cur.execute(CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX)
+            cur.execute(CREATE_RECOMMENDATIONS_PROFILE_PAPER_GENERATED_INDEX)
 
 if __name__ == "__main__":
     main()
