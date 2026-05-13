@@ -4,6 +4,7 @@ Creates the Postgres schema
 
 import psycopg
 from db_helper import get_database_url
+from keyword_search import PAPER_SEARCH_VECTOR_SQL
 
 ########################################
 ############### PAPERS #################
@@ -24,14 +25,11 @@ CREATE TABLE IF NOT EXISTS papers (
 );
 """
 
-CREATE_PAPERS_KEYWORD_INDEX = """
+CREATE_PAPERS_KEYWORD_INDEX = f"""
 CREATE INDEX IF NOT EXISTS papers_keyword_idx
 ON papers
 USING GIN (
-    (
-        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-        setweight(to_tsvector('english', coalesce(abstract, '')), 'B')
-    )
+    ({PAPER_SEARCH_VECTOR_SQL})
 );
 """
 
@@ -106,6 +104,20 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
 );
 """
 
+CREATE_PROFILE_KEYWORDS_TABLE = """
+CREATE TABLE IF NOT EXISTS profile_keywords (
+    profile_id UUID NOT NULL REFERENCES user_profiles(profile_id) ON DELETE CASCADE,
+    keyword TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (profile_id, keyword)
+);
+"""
+
+CREATE_PROFILE_KEYWORDS_PROFILE_INDEX = """
+CREATE INDEX IF NOT EXISTS profile_keywords_profile_idx
+ON profile_keywords (profile_id, created_at ASC);
+"""
+
 CREATE_PAPER_FEEDBACK_TABLE = """
 CREATE TABLE IF NOT EXISTS paper_feedback (
     feedback_id UUID PRIMARY KEY,
@@ -132,6 +144,8 @@ CREATE TABLE IF NOT EXISTS recommendations (
     profile_id UUID NOT NULL REFERENCES user_profiles(profile_id) ON DELETE CASCADE,
     arxiv_id TEXT NOT NULL REFERENCES papers(arxiv_id) ON DELETE CASCADE,
     rank INTEGER NOT NULL CHECK (rank >= 1),
+    base_dense_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+    keyword_boost DOUBLE PRECISION NOT NULL DEFAULT 0,
     final_score DOUBLE PRECISION NOT NULL,
     candidate_window TEXT NOT NULL,
     fallback_stage SMALLINT NOT NULL DEFAULT 0,
@@ -139,6 +153,16 @@ CREATE TABLE IF NOT EXISTS recommendations (
     UNIQUE(run_id, profile_id, rank),
     UNIQUE(run_id, profile_id, arxiv_id)
 );
+"""
+
+ALTER_RECOMMENDATIONS_ADD_BASE_DENSE_SCORE = """
+ALTER TABLE recommendations
+ADD COLUMN IF NOT EXISTS base_dense_score DOUBLE PRECISION NOT NULL DEFAULT 0;
+"""
+
+ALTER_RECOMMENDATIONS_ADD_KEYWORD_BOOST = """
+ALTER TABLE recommendations
+ADD COLUMN IF NOT EXISTS keyword_boost DOUBLE PRECISION NOT NULL DEFAULT 0;
 """
 
 CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX = """
@@ -162,9 +186,13 @@ def main():
             cur.execute(CREATE_USER_PROFILES_TABLE)
             cur.execute(CREATE_USER_PROFILES_USER_INDEX)
             cur.execute(CREATE_PROFILE_PREFERENCES_TABLE)
+            cur.execute(CREATE_PROFILE_KEYWORDS_TABLE)
+            cur.execute(CREATE_PROFILE_KEYWORDS_PROFILE_INDEX)
             cur.execute(CREATE_PAPER_FEEDBACK_TABLE)
             cur.execute(CREATE_PAPER_FEEDBACK_PROFILE_PAPER_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_TABLE)
+            cur.execute(ALTER_RECOMMENDATIONS_ADD_BASE_DENSE_SCORE)
+            cur.execute(ALTER_RECOMMENDATIONS_ADD_KEYWORD_BOOST)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_PAPER_GENERATED_INDEX)
 

@@ -4,8 +4,9 @@ Generates top-K recommendations per (run_id, profile_id)
 
 import uuid
 import psycopg
-from config import DEFAULT_USER_ID, get_daily_picks_k
+from config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
 from db_helper import get_database_url
+from keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
 from profiles import get_or_create_default_profile
 
 FETCH_RUN_SQL = """
@@ -21,7 +22,7 @@ FROM profile_preferences
 WHERE profile_id = %s;
 """
 
-RANK_CANDIDATES_SQL = """
+RANK_CANDIDATES_SQL = f"""
 WITH run_context AS (
     SELECT category, max_results
     FROM runs
@@ -168,9 +169,29 @@ scored AS (
         c.published_at,
         c.fallback_stage,
         c.candidate_window,
-        1 - (c.embedding <=> pc.preference_embedding) AS final_score
+        1 - (c.embedding <=> pc.preference_embedding) AS base_dense_score,
+        LEAST(
+            COALESCE(keyword_scores.keyword_score_sum, 0.0),
+            %s
+        ) AS keyword_boost,
+        (1 - (c.embedding <=> pc.preference_embedding)) + LEAST(
+            COALESCE(keyword_scores.keyword_score_sum, 0.0),
+            %s
+        ) AS final_score
     FROM all_candidates c
     CROSS JOIN preference_context pc
+    LEFT JOIN LATERAL (
+        SELECT
+            SUM(
+                ts_rank_cd(
+                    {paper_search_vector_sql("c")},
+                    websearch_to_tsquery('{SEARCH_DICTIONARY}', pk.keyword)
+                )
+            ) AS keyword_score_sum
+        FROM profile_keywords pk
+        WHERE pk.profile_id = %s
+          AND {paper_search_vector_sql("c")} @@ websearch_to_tsquery('{SEARCH_DICTIONARY}', pk.keyword)
+    ) AS keyword_scores ON TRUE
 ),
 deduped AS (
     SELECT DISTINCT ON (arxiv_id)
@@ -180,6 +201,8 @@ deduped AS (
         published_at,
         fallback_stage,
         candidate_window,
+        base_dense_score,
+        keyword_boost,
         final_score
     FROM scored
     ORDER BY
@@ -196,6 +219,8 @@ prioritized AS (
         published_at,
         fallback_stage,
         candidate_window,
+        base_dense_score,
+        keyword_boost,
         final_score
     FROM deduped
     ORDER BY
@@ -219,6 +244,8 @@ ranked AS (
         abstract,
         fallback_stage,
         candidate_window,
+        base_dense_score,
+        keyword_boost,
         final_score
     FROM prioritized
 )
@@ -229,6 +256,8 @@ SELECT
     abstract,
     fallback_stage,
     candidate_window,
+    base_dense_score,
+    keyword_boost,
     final_score
 FROM ranked
 ORDER BY rank ASC;
@@ -247,12 +276,14 @@ INSERT INTO recommendations (
     profile_id,
     arxiv_id,
     rank,
+    base_dense_score,
+    keyword_boost,
     final_score,
     candidate_window,
     fallback_stage
 )
 VALUES (
-    %s, %s, %s, %s, %s, %s, %s, %s
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
 );
 """
 
@@ -304,7 +335,16 @@ def generate_recommendations(
 
             cur.execute(
                 RANK_CANDIDATES_SQL,
-                (run_id, resolved_profile_id, resolved_profile_id, resolved_profile_id, effective_k),
+                (
+                    run_id,
+                    resolved_profile_id,
+                    resolved_profile_id,
+                    resolved_profile_id,
+                    get_keyword_boost_cap(),
+                    get_keyword_boost_cap(),
+                    resolved_profile_id,
+                    effective_k,
+                ),
             )
             rows = cur.fetchall()
 
@@ -318,6 +358,8 @@ def generate_recommendations(
                     row[1],
                     int(row[0]),
                     float(row[6]),
+                    float(row[7]),
+                    float(row[8]),
                     row[5],
                     int(row[4]),
                 )
@@ -335,7 +377,9 @@ def generate_recommendations(
             "abstract": row[3] or "",
             "fallback_stage": int(row[4]),
             "candidate_window": row[5],
-            "final_score": float(row[6]),
+            "base_dense_score": float(row[6]),
+            "keyword_boost": float(row[7]),
+            "final_score": float(row[8]),
         }
         for row in rows
     ]

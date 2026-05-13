@@ -24,23 +24,16 @@ def get_arxiv_categories() -> list[str]:
 
     return categories
 
-# Retrieval
-def get_hybrid_weights() -> tuple[float, float]:
-    dense = float(os.getenv("HYBRID_DENSE_WEIGHT", "0.6"))
-    keyword = float(os.getenv("HYBRID_KEYWORD_WEIGHT", "0.4"))
-
-    if dense < 0 or keyword < 0:
-        raise ValueError("Hybrid weights must be non-negative")
-
-    total = dense + keyword
-    if total == 0:
-        raise ValueError("At least one hybrid weight must be greater than zero")
-
-    return dense / total, keyword / total
-
 # Recommendation
 def get_daily_picks_k() -> int:
     if DEFAULT_DAILY_K < 1:
         raise ValueError("DAILY_PICKS_K must be >= 1")
 
     return DEFAULT_DAILY_K
+
+# Ranking
+def get_keyword_boost_cap() -> float:
+    raw_value = float(os.getenv("KEYWORD_BOOST_CAP", "0.25"))
+    if raw_value < 0:
+        raise ValueError("KEYWORD_BOOST_CAP must be non-negative")
+    return raw_value

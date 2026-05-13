@@ -36,7 +36,7 @@ def test_create_profile_inserts_with_next_slot(monkeypatch):
     monkeypatch.setattr(profiles, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
 
     cursor = MagicMock()
-    cursor.fetchall.return_value = [(1,)]  # slot 1 taken -> choose slot 2
+    cursor.fetchall.return_value = [(1,)]  # choose slot 2 if slot 1 is taken
     monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
 
     profile_id = profiles.create_profile(
@@ -122,3 +122,55 @@ def test_get_or_create_default_profile_creates_when_missing(monkeypatch):
         category="cs.AI",
         interest_sentence="Interest",
     )
+
+def test_add_profile_keyword_inserts_normalized_value(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [
+        (1,),   # profile ownership exists
+        (0,),   # current count
+        ("kv cache",),  # inserted
+    ]
+    cursor.fetchall.return_value = [("encoder transformers",), ("kv cache",)]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    keywords = profiles.add_profile_keyword(
+        profile_id="profile-1",
+        user_id="user-1",
+        keyword="  KV Cache  ",
+    )
+
+    insert_params = cursor.execute.call_args_list[2].args[1]
+    assert insert_params == ("profile-1", "kv cache")
+    assert keywords == ["encoder transformers", "kv cache"]
+
+def test_add_profile_keyword_enforces_cap(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [
+        (1,),   # profile ownership exists
+        (10,),  # current count
+        ("new keyword",),  # inserted (but should rollback with error)
+    ]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    with pytest.raises(ValueError, match="cap reached"):
+        profiles.add_profile_keyword(
+            profile_id="profile-1",
+            user_id="user-1",
+            keyword="new keyword",
+        )
+
+def test_remove_profile_keyword_returns_remaining_list(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (1,)
+    cursor.fetchall.return_value = [("encoder transformers",)]
+    monkeypatch.setattr(profiles.psycopg, "connect", _mock_connection_with_cursor(cursor))
+
+    keywords = profiles.remove_profile_keyword(
+        profile_id="profile-1",
+        user_id="user-1",
+        keyword="KV Cache",
+    )
+
+    delete_params = cursor.execute.call_args_list[1].args[1]
+    assert delete_params == ("profile-1", "kv cache")
+    assert keywords == ["encoder transformers"]

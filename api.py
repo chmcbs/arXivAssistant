@@ -10,7 +10,13 @@ from pydantic import BaseModel, Field
 from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 from db_helper import get_database_url
 from preferences import initialize_preference_embedding, save_feedback, update_preference_embedding
-from profiles import create_profile, get_or_create_default_profile
+from profiles import (
+    add_profile_keyword,
+    create_profile,
+    get_or_create_default_profile,
+    list_profile_keywords,
+    remove_profile_keyword,
+)
 
 app = FastAPI(title="arXiv Assistant API")
 
@@ -34,6 +40,8 @@ SELECT
     rec.run_id::text,
     r.category,
     rec.generated_at,
+    rec.base_dense_score,
+    rec.keyword_boost,
     rec.final_score,
     rec.candidate_window,
     rec.fallback_stage
@@ -89,7 +97,16 @@ SELECT
     p.category,
     p.interest_sentence,
     p.created_at,
-    pp.updated_at
+    pp.updated_at,
+    COALESCE(
+        ARRAY(
+            SELECT pk.keyword
+            FROM profile_keywords pk
+            WHERE pk.profile_id = p.profile_id
+            ORDER BY pk.keyword ASC
+        ),
+        ARRAY[]::text[]
+    ) AS keywords
 FROM user_profiles p
 LEFT JOIN profile_preferences pp ON pp.profile_id = p.profile_id
 WHERE p.user_id = %s
@@ -107,6 +124,8 @@ class DebugPick(PublicPick):
     run_id: str
     category: str
     generated_at: datetime
+    base_dense_score: float
+    keyword_boost: float
     final_score: float
     candidate_window: str
     fallback_stage: int
@@ -117,6 +136,7 @@ class ProfileSummary(BaseModel):
     profile_slot: int
     category: str
     interest_sentence: str
+    keywords: list[str]
     created_at: datetime
     preference_updated_at: datetime | None = None
 
@@ -176,6 +196,15 @@ class ListProfilesResponse(BaseModel):
     user_id: str
     profiles: list[ProfileSummary]
 
+class ManageProfileKeywordRequest(BaseModel):
+    user_id: str = DEFAULT_USER_ID
+    keyword: str
+
+class ManageProfileKeywordResponse(BaseModel):
+    user_id: str
+    profile_id: str
+    keywords: list[str]
+
 def _resolve_profile(user_id: str, profile_id: str | None) -> dict:
     if profile_id:
         with psycopg.connect(get_database_url()) as conn:
@@ -226,9 +255,11 @@ def _debug_pick(row: tuple) -> dict:
         "run_id": row[5],
         "category": row[6],
         "generated_at": row[7],
-        "final_score": float(row[8]),
-        "candidate_window": row[9],
-        "fallback_stage": int(row[10]),
+        "base_dense_score": float(row[8]),
+        "keyword_boost": float(row[9]),
+        "final_score": float(row[10]),
+        "candidate_window": row[11],
+        "fallback_stage": int(row[12]),
     }
 
 def get_daily_picks_payload(
@@ -372,9 +403,63 @@ def list_profiles_payload(user_id: str = DEFAULT_USER_ID) -> dict:
                 "interest_sentence": row[4],
                 "created_at": row[5],
                 "preference_updated_at": row[6],
+                "keywords": list(row[7] or []),
             }
             for row in rows
         ],
+    }
+
+def add_profile_keyword_payload(
+    profile_id: str,
+    request: ManageProfileKeywordRequest,
+) -> dict:
+    try:
+        keywords = add_profile_keyword(
+            profile_id=profile_id,
+            user_id=request.user_id,
+            keyword=request.keyword,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {
+        "user_id": request.user_id,
+        "profile_id": profile_id,
+        "keywords": keywords,
+    }
+
+def remove_profile_keyword_payload(
+    profile_id: str,
+    request: ManageProfileKeywordRequest,
+) -> dict:
+    try:
+        keywords = remove_profile_keyword(
+            profile_id=profile_id,
+            user_id=request.user_id,
+            keyword=request.keyword,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {
+        "user_id": request.user_id,
+        "profile_id": profile_id,
+        "keywords": keywords,
+    }
+
+def list_profile_keywords_payload(
+    profile_id: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    try:
+        keywords = list_profile_keywords(profile_id=profile_id, user_id=user_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {
+        "user_id": user_id,
+        "profile_id": profile_id,
+        "keywords": keywords,
     }
 
 def get_metrics_payload(latest_runs_limit: int = 10) -> dict:
@@ -447,6 +532,27 @@ def profiles_create(request: CreateProfileRequest) -> dict:
 @app.get("/profiles", response_model=ListProfilesResponse)
 def profiles_list(user_id: str = DEFAULT_USER_ID) -> dict:
     return list_profiles_payload(user_id=user_id)
+
+@app.get("/profiles/{profile_id}/keywords", response_model=ManageProfileKeywordResponse)
+def profiles_keywords_list(
+    profile_id: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> dict:
+    return list_profile_keywords_payload(profile_id=profile_id, user_id=user_id)
+
+@app.post("/profiles/{profile_id}/keywords", response_model=ManageProfileKeywordResponse)
+def profiles_keywords_add(
+    profile_id: str,
+    request: ManageProfileKeywordRequest,
+) -> dict:
+    return add_profile_keyword_payload(profile_id=profile_id, request=request)
+
+@app.delete("/profiles/{profile_id}/keywords", response_model=ManageProfileKeywordResponse)
+def profiles_keywords_remove(
+    profile_id: str,
+    request: ManageProfileKeywordRequest,
+) -> dict:
+    return remove_profile_keyword_payload(profile_id=profile_id, request=request)
 
 @app.get("/metrics")
 def metrics(latest_runs_limit: int = 10) -> dict:

@@ -28,6 +28,8 @@ def _pick_row(rank=1):
         "run-123",
         "cs.AI",
         generated_at,
+        0.75,
+        0.15,
         0.9,
         "run",
         0,
@@ -90,6 +92,8 @@ def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
     assert payload["run_id"] == "run-123"
     assert payload["category"] == "cs.AI"
     assert payload["picks"][0]["final_score"] == 0.9
+    assert payload["picks"][0]["base_dense_score"] == 0.75
+    assert payload["picks"][0]["keyword_boost"] == 0.15
     assert payload["picks"][0]["candidate_window"] == "run"
     assert payload["picks"][0]["fallback_stage"] == 0
 
@@ -187,6 +191,58 @@ def test_save_feedback_payload_updates_preferences(monkeypatch):
         "arxiv_id": "2601.00001",
         "label": "like",
         "preference_updated": True,
+    }
+
+def test_add_profile_keyword_payload_maps_response(monkeypatch):
+    monkeypatch.setattr(
+        api,
+        "add_profile_keyword",
+        Mock(return_value=["encoder transformers", "kv cache"]),
+    )
+
+    payload = api.add_profile_keyword_payload(
+        profile_id="profile-1",
+        request=api.ManageProfileKeywordRequest(
+            user_id="default",
+            keyword="KV Cache",
+        ),
+    )
+
+    api.add_profile_keyword.assert_called_once_with(
+        profile_id="profile-1",
+        user_id="default",
+        keyword="KV Cache",
+    )
+    assert payload == {
+        "user_id": "default",
+        "profile_id": "profile-1",
+        "keywords": ["encoder transformers", "kv cache"],
+    }
+
+def test_remove_profile_keyword_payload_maps_response(monkeypatch):
+    monkeypatch.setattr(
+        api,
+        "remove_profile_keyword",
+        Mock(return_value=["encoder transformers"]),
+    )
+
+    payload = api.remove_profile_keyword_payload(
+        profile_id="profile-1",
+        request=api.ManageProfileKeywordRequest(
+            user_id="default",
+            keyword="KV Cache",
+        ),
+    )
+
+    api.remove_profile_keyword.assert_called_once_with(
+        profile_id="profile-1",
+        user_id="default",
+        keyword="KV Cache",
+    )
+    assert payload == {
+        "user_id": "default",
+        "profile_id": "profile-1",
+        "keywords": ["encoder transformers"],
     }
 
 def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):

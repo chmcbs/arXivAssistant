@@ -6,6 +6,7 @@ import uuid
 import psycopg
 from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 from db_helper import get_database_url
+from keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
 
 MAX_PROFILES_PER_USER = 3
 
@@ -163,3 +164,136 @@ def get_or_create_default_profile(
     if profile is None:
         raise ValueError("failed to create default profile")
     return profile
+
+def list_profile_keywords(
+    profile_id: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> list[str]:
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM user_profiles
+                WHERE profile_id = %s
+                  AND user_id = %s;
+                """,
+                (profile_id, user_id),
+            )
+            if cur.fetchone() is None:
+                raise ValueError("profile not found for user")
+
+            cur.execute(
+                """
+                SELECT keyword
+                FROM profile_keywords
+                WHERE profile_id = %s
+                ORDER BY keyword ASC;
+                """,
+                (profile_id,),
+            )
+            rows = cur.fetchall()
+
+    return [row[0] for row in rows]
+
+def add_profile_keyword(
+    profile_id: str,
+    keyword: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> list[str]:
+    normalized_keyword = normalize_keyword(keyword)
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM user_profiles
+                WHERE profile_id = %s
+                  AND user_id = %s;
+                """,
+                (profile_id, user_id),
+            )
+            if cur.fetchone() is None:
+                raise ValueError("profile not found for user")
+
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM profile_keywords
+                WHERE profile_id = %s;
+                """,
+                (profile_id,),
+            )
+            current_count = int(cur.fetchone()[0])
+
+            cur.execute(
+                """
+                INSERT INTO profile_keywords (profile_id, keyword)
+                VALUES (%s, %s)
+                ON CONFLICT (profile_id, keyword) DO NOTHING
+                RETURNING keyword;
+                """,
+                (profile_id, normalized_keyword),
+            )
+            inserted = cur.fetchone()
+            if inserted is not None and current_count >= MAX_KEYWORDS_PER_PROFILE:
+                raise ValueError(
+                    f"profile keyword cap reached ({MAX_KEYWORDS_PER_PROFILE})"
+                )
+
+            cur.execute(
+                """
+                SELECT keyword
+                FROM profile_keywords
+                WHERE profile_id = %s
+                ORDER BY keyword ASC;
+                """,
+                (profile_id,),
+            )
+            rows = cur.fetchall()
+
+    return [row[0] for row in rows]
+
+def remove_profile_keyword(
+    profile_id: str,
+    keyword: str,
+    user_id: str = DEFAULT_USER_ID,
+) -> list[str]:
+    normalized_keyword = normalize_keyword(keyword)
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM user_profiles
+                WHERE profile_id = %s
+                  AND user_id = %s;
+                """,
+                (profile_id, user_id),
+            )
+            if cur.fetchone() is None:
+                raise ValueError("profile not found for user")
+
+            cur.execute(
+                """
+                DELETE FROM profile_keywords
+                WHERE profile_id = %s
+                  AND keyword = %s;
+                """,
+                (profile_id, normalized_keyword),
+            )
+
+            cur.execute(
+                """
+                SELECT keyword
+                FROM profile_keywords
+                WHERE profile_id = %s
+                ORDER BY keyword ASC;
+                """,
+                (profile_id,),
+            )
+            rows = cur.fetchall()
+
+    return [row[0] for row in rows]
