@@ -4,18 +4,14 @@ FastAPI service for personalised arXiv paper recommendations
 
 from datetime import datetime
 from typing import Literal
-
 import psycopg
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-
 from config import DEFAULT_USER_ID, get_arxiv_categories
 from db_helper import get_database_url
 from preferences import save_feedback, update_preference_embedding
 
-
 app = FastAPI(title="arXiv Assistant API")
-
 
 LATEST_DAILY_PICKS_SQL = """
 WITH latest_run AS (
@@ -84,14 +80,12 @@ GROUP BY user_id
 ORDER BY user_id ASC;
 """
 
-
 class PublicPick(BaseModel):
     rank: int
     arxiv_id: str
     title: str
     abstract: str
     pdf_url: str | None
-
 
 class DebugPick(PublicPick):
     run_id: str
@@ -101,12 +95,10 @@ class DebugPick(PublicPick):
     candidate_window: str
     fallback_stage: int
 
-
 class DailyPicksResponse(BaseModel):
     user_id: str
     needs_generation: bool
     picks: list[PublicPick]
-
 
 class DebugDailyPicksResponse(BaseModel):
     user_id: str
@@ -116,12 +108,10 @@ class DebugDailyPicksResponse(BaseModel):
     generated_at: datetime | None = None
     picks: list[DebugPick]
 
-
 class GenerateDailyPicksRequest(BaseModel):
     user_id: str = DEFAULT_USER_ID
     max_results: int = Field(default=150, ge=1)
     embedding_limit: int = Field(default=600, ge=1)
-
 
 class GenerateDailyPicksResponse(BaseModel):
     user_id: str
@@ -131,12 +121,10 @@ class GenerateDailyPicksResponse(BaseModel):
     needs_generation: bool
     picks: list[PublicPick]
 
-
 class FeedbackRequest(BaseModel):
     arxiv_id: str
     label: Literal["like", "dislike"]
     user_id: str = DEFAULT_USER_ID
-
 
 class FeedbackResponse(BaseModel):
     feedback_id: str
@@ -145,13 +133,11 @@ class FeedbackResponse(BaseModel):
     label: Literal["like", "dislike"]
     preference_updated: bool
 
-
 def _fetch_latest_picks(user_id: str) -> list[tuple]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(LATEST_DAILY_PICKS_SQL, (user_id, user_id))
             return cur.fetchall()
-
 
 def _public_pick(row: tuple) -> dict:
     return {
@@ -161,7 +147,6 @@ def _public_pick(row: tuple) -> dict:
         "abstract": row[3],
         "pdf_url": row[4],
     }
-
 
 def _debug_pick(row: tuple) -> dict:
     return {
@@ -174,7 +159,6 @@ def _debug_pick(row: tuple) -> dict:
         "fallback_stage": int(row[10]),
     }
 
-
 def get_daily_picks_payload(user_id: str = DEFAULT_USER_ID) -> dict:
     rows = _fetch_latest_picks(user_id)
 
@@ -183,7 +167,6 @@ def get_daily_picks_payload(user_id: str = DEFAULT_USER_ID) -> dict:
         "needs_generation": not rows,
         "picks": [_public_pick(row) for row in rows],
     }
-
 
 def get_debug_daily_picks_payload(user_id: str = DEFAULT_USER_ID) -> dict:
     rows = _fetch_latest_picks(user_id)
@@ -204,7 +187,6 @@ def get_debug_daily_picks_payload(user_id: str = DEFAULT_USER_ID) -> dict:
 
     return payload
 
-
 def _ensure_single_category_mvp() -> None:
     categories = get_arxiv_categories()
     if len(categories) != 1:
@@ -212,7 +194,6 @@ def _ensure_single_category_mvp() -> None:
             status_code=400,
             detail="API MVP supports exactly one configured arXiv category",
         )
-
 
 def generate_daily_picks_payload(request: GenerateDailyPicksRequest) -> dict:
     _ensure_single_category_mvp()
@@ -238,7 +219,6 @@ def generate_daily_picks_payload(request: GenerateDailyPicksRequest) -> dict:
         "picks": picks_payload["picks"],
     }
 
-
 def save_feedback_payload(request: FeedbackRequest) -> dict:
     try:
         feedback_id = save_feedback(
@@ -257,7 +237,6 @@ def save_feedback_payload(request: FeedbackRequest) -> dict:
         "label": request.label,
         "preference_updated": True,
     }
-
 
 def get_metrics_payload(latest_runs_limit: int = 10) -> dict:
     with psycopg.connect(get_database_url()) as conn:
@@ -300,26 +279,21 @@ def get_metrics_payload(latest_runs_limit: int = 10) -> dict:
         "recommendations_by_user": recommendations_by_user,
     }
 
-
 @app.get("/daily-picks", response_model=DailyPicksResponse)
 def daily_picks(user_id: str = DEFAULT_USER_ID) -> dict:
     return get_daily_picks_payload(user_id)
-
 
 @app.get("/daily-picks/debug", response_model=DebugDailyPicksResponse)
 def daily_picks_debug(user_id: str = DEFAULT_USER_ID) -> dict:
     return get_debug_daily_picks_payload(user_id)
 
-
 @app.post("/daily-picks/generate", response_model=GenerateDailyPicksResponse)
 def daily_picks_generate(request: GenerateDailyPicksRequest) -> dict:
     return generate_daily_picks_payload(request)
 
-
 @app.post("/feedback", response_model=FeedbackResponse)
 def feedback(request: FeedbackRequest) -> dict:
     return save_feedback_payload(request)
-
 
 @app.get("/metrics")
 def metrics(latest_runs_limit: int = 10) -> dict:

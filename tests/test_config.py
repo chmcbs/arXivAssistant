@@ -1,5 +1,5 @@
 """
-Tests application configuration helpers
+Tests config module helpers
 """
 
 import pytest

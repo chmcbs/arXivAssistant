@@ -1,11 +1,9 @@
 """
 Tests recommendation generation and persistence
 """
-
 from unittest.mock import MagicMock, Mock
 import pytest
 import recommendations
-
 
 def _mock_connection_with_cursor(cursor):
     connection = MagicMock()
@@ -15,7 +13,6 @@ def _mock_connection_with_cursor(cursor):
     connect.return_value.__enter__.return_value = connection
     return connect, cursor
 
-
 def test_generate_recommendations_requires_completed_run(monkeypatch):
     cursor = MagicMock()
     cursor.fetchone.return_value = None
@@ -24,7 +21,6 @@ def test_generate_recommendations_requires_completed_run(monkeypatch):
 
     with pytest.raises(ValueError, match="must exist and be completed"):
         recommendations.generate_recommendations("run-123", user_id="default")
-
 
 def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     cursor = MagicMock()
@@ -80,7 +76,6 @@ def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     assert inserted_rows[0][6] == "run"
     assert inserted_rows[0][7] == 0
 
-
 def test_generate_recommendations_respects_k_override(monkeypatch):
     cursor = MagicMock()
     cursor.fetchone.side_effect = [("run-123", "cs.AI", 150)]
@@ -98,7 +93,6 @@ def test_generate_recommendations_respects_k_override(monkeypatch):
 
     rank_params = cursor.execute.call_args_list[1].args[1]
     assert rank_params == ("run-123", "default", "default", "default", 2)
-
 
 def test_generate_recommendations_rejects_invalid_override(monkeypatch):
     cursor = MagicMock()

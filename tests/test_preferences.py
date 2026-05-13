@@ -1,5 +1,5 @@
 """
-Tests the preferences pipeline
+Tests preference embedding and feedback handling
 """
 
 from unittest.mock import MagicMock, Mock

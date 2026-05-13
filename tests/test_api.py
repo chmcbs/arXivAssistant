@@ -1,16 +1,13 @@
 """
-Tests the FastAPI service helpers
+Tests FastAPI service helpers
 """
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
-
 from fastapi import HTTPException
 import pytest
-
 import api
-
 
 def _mock_connection_with_cursor(cursor):
     connection = MagicMock()
@@ -19,7 +16,6 @@ def _mock_connection_with_cursor(cursor):
     connect = MagicMock()
     connect.return_value.__enter__.return_value = connection
     return connect
-
 
 def _pick_row(rank=1):
     generated_at = datetime(2026, 1, 2, 9, 30, tzinfo=timezone.utc)
@@ -37,7 +33,6 @@ def _pick_row(rank=1):
         0,
     )
 
-
 def test_get_daily_picks_returns_empty_state(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = []
@@ -50,7 +45,6 @@ def test_get_daily_picks_returns_empty_state(monkeypatch):
         "needs_generation": True,
         "picks": [],
     }
-
 
 def test_get_daily_picks_returns_public_fields(monkeypatch):
     cursor = MagicMock()
@@ -70,7 +64,6 @@ def test_get_daily_picks_returns_public_fields(monkeypatch):
         }
     ]
 
-
 def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
     cursor = MagicMock()
     cursor.fetchall.return_value = [_pick_row()]
@@ -83,7 +76,6 @@ def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
     assert payload["picks"][0]["final_score"] == 0.9
     assert payload["picks"][0]["candidate_window"] == "run"
     assert payload["picks"][0]["fallback_stage"] == 0
-
 
 def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
     run_pipeline = Mock(
@@ -129,7 +121,6 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
     assert payload["recommendation_counts"] == {"run-123": 2}
     assert payload["picks"] == [{"rank": 1, "arxiv_id": "2601.00001"}]
 
-
 def test_generate_daily_picks_rejects_multiple_categories(monkeypatch):
     monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI", "cs.CL"]))
 
@@ -138,7 +129,6 @@ def test_generate_daily_picks_rejects_multiple_categories(monkeypatch):
 
     assert error.value.status_code == 400
     assert "API MVP" in error.value.detail
-
 
 def test_save_feedback_payload_updates_preferences(monkeypatch):
     monkeypatch.setattr(api, "save_feedback", Mock(return_value="feedback-123"))
@@ -165,7 +155,6 @@ def test_save_feedback_payload_updates_preferences(monkeypatch):
         "label": "like",
         "preference_updated": True,
     }
-
 
 def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):
     cursor = MagicMock()

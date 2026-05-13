@@ -255,6 +255,7 @@ VALUES (
 );
 """
 
+# Resolve the number of items to return (override > user preference > default)
 def _get_effective_k(cur, user_id: str, k_override: int | None) -> int:
     if k_override is not None:
         if k_override < 1:
@@ -276,6 +277,7 @@ def _ensure_completed_run(cur, run_id: str) -> tuple[str, str, int]:
         raise ValueError(f"Run {run_id} must exist and be completed")
     return str(row[0]), str(row[1]), int(row[2])
 
+# Rank papers for a completed run and persist as recommendations
 def generate_recommendations(
     run_id: str,
     user_id: str = DEFAULT_USER_ID,
