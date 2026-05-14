@@ -3,49 +3,54 @@ Tests FastAPI service helpers
 """
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
-from fastapi import HTTPException
+from unittest.mock import Mock
 import pytest
-import api
-
-def _mock_connection_with_cursor(cursor):
-    connection = MagicMock()
-    connection.cursor.return_value.__enter__.return_value = cursor
-
-    connect = MagicMock()
-    connect.return_value.__enter__.return_value = connection
-    return connect
+from api.queries.daily_picks import DailyPickRow
+from api.queries.metrics import LatestRunRow, MetricsRowSet
+from api.schemas import (
+    FeedbackRequest,
+    GenerateDailyPicksRequest,
+    ManageProfileKeywordRequest,
+    UpdateDigestSelectionRequest,
+)
+from api.services.daily_picks import (
+    generate_daily_picks_payload,
+    get_daily_picks_payload,
+    get_debug_daily_picks_payload,
+    save_feedback_payload,
+)
+from api.services.errors import BadRequestError
+from api.services.metrics import get_metrics_payload
+from api.services.profiles import (
+    add_profile_keyword_payload,
+    remove_profile_keyword_payload,
+    update_digest_selection_payload,
+)
 
 def _pick_row(rank=1):
-    generated_at = datetime(2026, 1, 2, 9, 30, tzinfo=timezone.utc)
-    return (
-        rank,
-        f"2601.0000{rank}",
-        f"Paper {rank}",
-        f"Abstract {rank}",
-        f"https://arxiv.org/pdf/2601.0000{rank}",
-        "run-123",
-        "cs.AI",
-        generated_at,
-        0.75,
-        0.15,
-        0.9,
-        "run",
-        0,
+    return DailyPickRow(
+        rank=rank,
+        arxiv_id=f"2601.0000{rank}",
+        title=f"Paper {rank}",
+        abstract=f"Abstract {rank}",
+        pdf_url=f"https://arxiv.org/pdf/2601.0000{rank}",
+        run_id="run-123",
+        category="cs.AI",
+        generated_at=datetime(2026, 1, 2, 9, 30, tzinfo=timezone.utc),
+        base_dense_score=0.75,
+        keyword_boost=0.15,
+        final_score=0.9,
+        candidate_window="run",
+        fallback_stage=0,
     )
 
-def test_get_daily_picks_returns_empty_state(monkeypatch):
-    cursor = MagicMock()
-    cursor.fetchall.return_value = []
-    monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
-    monkeypatch.setattr(
-        api,
-        "_resolve_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
+def test_get_daily_picks_returns_empty_state():
+    payload = get_daily_picks_payload(
+        user_id="default",
+        profile_id=None,
+        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        fetch_latest_picks=Mock(return_value=[]),
     )
-
-    payload = api.get_daily_picks_payload(user_id="default")
 
     assert payload == {
         "user_id": "default",
@@ -54,17 +59,13 @@ def test_get_daily_picks_returns_empty_state(monkeypatch):
         "picks": [],
     }
 
-def test_get_daily_picks_returns_public_fields(monkeypatch):
-    cursor = MagicMock()
-    cursor.fetchall.return_value = [_pick_row()]
-    monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
-    monkeypatch.setattr(
-        api,
-        "_resolve_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
+def test_get_daily_picks_returns_public_fields():
+    payload = get_daily_picks_payload(
+        user_id="default",
+        profile_id=None,
+        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        fetch_latest_picks=Mock(return_value=[_pick_row()]),
     )
-
-    payload = api.get_daily_picks_payload(user_id="default")
 
     assert payload["needs_generation"] is False
     assert payload["picks"] == [
@@ -77,17 +78,13 @@ def test_get_daily_picks_returns_public_fields(monkeypatch):
         }
     ]
 
-def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
-    cursor = MagicMock()
-    cursor.fetchall.return_value = [_pick_row()]
-    monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
-    monkeypatch.setattr(
-        api,
-        "_resolve_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
+def test_get_debug_daily_picks_includes_ranking_metadata():
+    payload = get_debug_daily_picks_payload(
+        user_id="default",
+        profile_id=None,
+        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        fetch_latest_picks=Mock(return_value=[_pick_row()]),
     )
-
-    payload = api.get_debug_daily_picks_payload(user_id="default")
 
     assert payload["run_id"] == "run-123"
     assert payload["category"] == "cs.AI"
@@ -97,7 +94,7 @@ def test_get_debug_daily_picks_includes_ranking_metadata(monkeypatch):
     assert payload["picks"][0]["candidate_window"] == "run"
     assert payload["picks"][0]["fallback_stage"] == 0
 
-def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
+def test_generate_daily_picks_runs_pipeline_and_returns_picks():
     run_pipeline = Mock(
         return_value={
             "run_ids": ["run-123"],
@@ -105,17 +102,18 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
             "recommendations_by_run": {"run-123": [{"rank": 1}, {"rank": 2}]},
         }
     )
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pipeline",
-        SimpleNamespace(run_pipeline=run_pipeline),
-    )
-    monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
-    monkeypatch.setattr(api, "list_digest_selected_profile_ids", Mock(return_value=["profile-1", "profile-2"]))
-    monkeypatch.setattr(
-        api,
-        "get_daily_picks_payload",
-        Mock(
+
+    payload = generate_daily_picks_payload(
+        GenerateDailyPicksRequest(
+            user_id="default",
+            max_results=123,
+            embedding_limit=456,
+        ),
+        get_arxiv_categories=Mock(return_value=["cs.AI"]),
+        resolve_profile=Mock(),
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1", "profile-2"]),
+        run_pipeline=run_pipeline,
+        get_daily_picks_payload=Mock(
             return_value={
                 "user_id": "default",
                 "profile_id": "profile-1",
@@ -123,14 +121,6 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
                 "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
             }
         ),
-    )
-
-    payload = api.generate_daily_picks_payload(
-        api.GenerateDailyPicksRequest(
-            user_id="default",
-            max_results=123,
-            embedding_limit=456,
-        )
     )
 
     run_pipeline.assert_called_once_with(
@@ -145,49 +135,53 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks(monkeypatch):
     assert payload["recommendation_counts"] == {"run-123": 2}
     assert payload["picks"] == [{"rank": 1, "arxiv_id": "2601.00001"}]
 
-def test_generate_daily_picks_rejects_multiple_categories(monkeypatch):
-    monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI", "cs.CL"]))
+def test_generate_daily_picks_rejects_multiple_categories():
+    with pytest.raises(BadRequestError) as error:
+        generate_daily_picks_payload(
+            GenerateDailyPicksRequest(),
+            get_arxiv_categories=Mock(return_value=["cs.AI", "cs.CL"]),
+            resolve_profile=Mock(),
+            list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
+            run_pipeline=Mock(),
+            get_daily_picks_payload=Mock(),
+        )
 
-    with pytest.raises(HTTPException) as error:
-        api.generate_daily_picks_payload(api.GenerateDailyPicksRequest())
+    assert "API MVP" in str(error.value)
 
-    assert error.value.status_code == 400
-    assert "API MVP" in error.value.detail
+def test_generate_daily_picks_rejects_when_no_digest_profiles_selected():
+    with pytest.raises(BadRequestError) as error:
+        generate_daily_picks_payload(
+            GenerateDailyPicksRequest(user_id="default"),
+            get_arxiv_categories=Mock(return_value=["cs.AI"]),
+            resolve_profile=Mock(),
+            list_digest_selected_profile_ids=Mock(return_value=[]),
+            run_pipeline=Mock(),
+            get_daily_picks_payload=Mock(),
+        )
 
-def test_generate_daily_picks_rejects_when_no_digest_profiles_selected(monkeypatch):
-    monkeypatch.setattr(api, "get_arxiv_categories", Mock(return_value=["cs.AI"]))
-    monkeypatch.setattr(api, "list_digest_selected_profile_ids", Mock(return_value=[]))
+    assert "at least one profile" in str(error.value)
 
-    with pytest.raises(HTTPException) as error:
-        api.generate_daily_picks_payload(api.GenerateDailyPicksRequest(user_id="default"))
-
-    assert error.value.status_code == 400
-    assert "at least one profile" in error.value.detail
-
-def test_save_feedback_payload_updates_preferences(monkeypatch):
-    monkeypatch.setattr(api, "save_feedback", Mock(return_value="feedback-123"))
-    monkeypatch.setattr(api, "update_preference_embedding", Mock())
-    monkeypatch.setattr(
-        api,
-        "_resolve_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
-    )
-
-    payload = api.save_feedback_payload(
-        api.FeedbackRequest(
+def test_save_feedback_payload_updates_preferences():
+    save_feedback = Mock(return_value="feedback-123")
+    update_preference_embedding = Mock()
+    payload = save_feedback_payload(
+        FeedbackRequest(
             user_id="default",
             arxiv_id="2601.00001",
             label="like",
-        )
+        ),
+        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        save_feedback=save_feedback,
+        update_preference_embedding=update_preference_embedding,
     )
 
-    api.save_feedback.assert_called_once_with(
+    save_feedback.assert_called_once_with(
         arxiv_id="2601.00001",
         label="like",
         user_id="default",
         profile_id="profile-1",
     )
-    api.update_preference_embedding.assert_called_once_with(
+    update_preference_embedding.assert_called_once_with(
         user_id="default",
         profile_id="profile-1",
     )
@@ -200,22 +194,18 @@ def test_save_feedback_payload_updates_preferences(monkeypatch):
         "preference_updated": True,
     }
 
-def test_add_profile_keyword_payload_maps_response(monkeypatch):
-    monkeypatch.setattr(
-        api,
-        "add_profile_keyword",
-        Mock(return_value=["encoder transformers", "kv cache"]),
-    )
-
-    payload = api.add_profile_keyword_payload(
+def test_add_profile_keyword_payload_maps_response():
+    add_profile_keyword = Mock(return_value=["encoder transformers", "kv cache"])
+    payload = add_profile_keyword_payload(
         profile_id="profile-1",
-        request=api.ManageProfileKeywordRequest(
+        request=ManageProfileKeywordRequest(
             user_id="default",
             keyword="KV Cache",
         ),
+        add_profile_keyword=add_profile_keyword,
     )
 
-    api.add_profile_keyword.assert_called_once_with(
+    add_profile_keyword.assert_called_once_with(
         profile_id="profile-1",
         user_id="default",
         keyword="KV Cache",
@@ -226,22 +216,18 @@ def test_add_profile_keyword_payload_maps_response(monkeypatch):
         "keywords": ["encoder transformers", "kv cache"],
     }
 
-def test_remove_profile_keyword_payload_maps_response(monkeypatch):
-    monkeypatch.setattr(
-        api,
-        "remove_profile_keyword",
-        Mock(return_value=["encoder transformers"]),
-    )
-
-    payload = api.remove_profile_keyword_payload(
+def test_remove_profile_keyword_payload_maps_response():
+    remove_profile_keyword = Mock(return_value=["encoder transformers"])
+    payload = remove_profile_keyword_payload(
         profile_id="profile-1",
-        request=api.ManageProfileKeywordRequest(
+        request=ManageProfileKeywordRequest(
             user_id="default",
             keyword="KV Cache",
         ),
+        remove_profile_keyword=remove_profile_keyword,
     )
 
-    api.remove_profile_keyword.assert_called_once_with(
+    remove_profile_keyword.assert_called_once_with(
         profile_id="profile-1",
         user_id="default",
         keyword="KV Cache",
@@ -252,21 +238,17 @@ def test_remove_profile_keyword_payload_maps_response(monkeypatch):
         "keywords": ["encoder transformers"],
     }
 
-def test_update_digest_selection_payload_maps_response(monkeypatch):
-    monkeypatch.setattr(
-        api,
-        "set_digest_profile_selection",
-        Mock(return_value=["profile-2", "profile-3"]),
-    )
-
-    payload = api.update_digest_selection_payload(
-        api.UpdateDigestSelectionRequest(
+def test_update_digest_selection_payload_maps_response():
+    set_digest_profile_selection = Mock(return_value=["profile-2", "profile-3"])
+    payload = update_digest_selection_payload(
+        UpdateDigestSelectionRequest(
             user_id="default",
             profile_ids=["profile-2", "profile-3"],
-        )
+        ),
+        set_digest_profile_selection=set_digest_profile_selection,
     )
 
-    api.set_digest_profile_selection.assert_called_once_with(
+    set_digest_profile_selection.assert_called_once_with(
         profile_ids=["profile-2", "profile-3"],
         user_id="default",
     )
@@ -275,29 +257,29 @@ def test_update_digest_selection_payload_maps_response(monkeypatch):
         "selected_profile_ids": ["profile-2", "profile-3"],
     }
 
-def test_get_metrics_payload_returns_run_and_recommendation_counts(monkeypatch):
-    cursor = MagicMock()
-    cursor.fetchall.side_effect = [
-        [("completed", 2), ("failed", 1)],
-        [
-            (
-                "run-123",
-                "completed",
-                "cs.AI",
-                150,
-                100,
-                100,
-                datetime(2026, 1, 2, tzinfo=timezone.utc),
-                datetime(2026, 1, 2, 1, tzinfo=timezone.utc),
-                None,
+def test_get_metrics_payload_returns_run_and_recommendation_counts():
+    metrics_rows = MetricsRowSet(
+        run_status_counts={"completed": 2, "failed": 1},
+        latest_runs=[
+            LatestRunRow(
+                run_id="run-123",
+                status="completed",
+                category="cs.AI",
+                max_results=150,
+                fetched_count=100,
+                saved_count=100,
+                started_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                finished_at=datetime(2026, 1, 2, 1, tzinfo=timezone.utc),
+                error_message=None,
             )
         ],
-        [("profile-1", 3)],
-    ]
-    cursor.fetchone.return_value = (3,)
-    monkeypatch.setattr(api.psycopg, "connect", _mock_connection_with_cursor(cursor))
-
-    payload = api.get_metrics_payload(latest_runs_limit=5)
+        total_recommendations=3,
+        recommendations_by_profile={"profile-1": 3},
+    )
+    payload = get_metrics_payload(
+        latest_runs_limit=5,
+        fetch_metrics_rows=Mock(return_value=metrics_rows),
+    )
 
     assert payload["run_status_counts"] == {"completed": 2, "failed": 1}
     assert payload["latest_runs"][0]["run_id"] == "run-123"
