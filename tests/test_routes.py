@@ -102,3 +102,13 @@ def test_daily_picks_generate_route_returns_500_for_internal_failure(monkeypatch
     assert response.status_code == 500
     payload = response.json()
     assert "NO_SUCCESSFUL_GENERATION" in payload["detail"]
+
+
+def test_validate_route_returns_internal_validation_ui():
+    client = TestClient(routes.app)
+    response = client.get("/validate")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Validation UI" in response.text
+    assert "POST /daily-picks/generate" in response.text
