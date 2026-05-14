@@ -121,6 +121,18 @@ def validate() -> str:
 
   <div class="grid">
     <section class="card">
+      <h2>POST /profiles</h2>
+      <label for="create-user-id">user_id</label>
+      <input id="create-user-id" value="default">
+      <label for="create-category">category</label>
+      <input id="create-category" value="cs.AI">
+      <label for="create-interest-sentence">interest_sentence</label>
+      <input id="create-interest-sentence" value="Efficient LLM systems">
+      <button id="create-btn">Create Profile</button>
+      <pre id="create-out">Create a profile for clean database bootstrapping.</pre>
+    </section>
+
+    <section class="card">
       <h2>GET /profiles</h2>
       <label for="profiles-user-id">user_id</label>
       <input id="profiles-user-id" value="default">
@@ -245,6 +257,16 @@ def validate() -> str:
       run("profiles-out", async function () {
         var userId = encodeURIComponent(document.getElementById("profiles-user-id").value.trim() || "default");
         return request("/profiles?user_id=" + userId, "GET");
+      });
+    });
+
+    document.getElementById("create-btn").addEventListener("click", function () {
+      run("create-out", async function () {
+        return request("/profiles", "POST", {
+          user_id: document.getElementById("create-user-id").value.trim() || "default",
+          category: document.getElementById("create-category").value.trim() || "cs.AI",
+          interest_sentence: document.getElementById("create-interest-sentence").value.trim() || "Efficient LLM systems"
+        });
       });
     });
 
