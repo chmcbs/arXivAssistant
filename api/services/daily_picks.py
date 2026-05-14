@@ -17,6 +17,7 @@ def get_daily_picks_payload(
     resolve_profile: Callable[[str, str | None], dict],
     list_digest_selected_profile_ids: Callable[[str], list[str]],
     fetch_latest_picks: Callable[[str], list],
+    anchored_run_ids: list[str] | None = None,
 ) -> dict:
     if profile_id is not None:
         target_profile_ids = [profile_id]
@@ -26,17 +27,20 @@ def get_daily_picks_payload(
             raise BadRequestError("at least one profile must be selected for digest generation")
 
     sections = []
+    has_anchor_runs = bool(anchored_run_ids)
     for target_profile_id in target_profile_ids:
         profile = resolve_profile(user_id=user_id, profile_id=target_profile_id)
         resolved_profile_id = str(profile["profile_id"])
         rows = fetch_latest_picks(resolved_profile_id)
+        # If the caller anchored to specific run IDs, generation already happened for this response.
+        section_needs_generation = not rows and not has_anchor_runs
         sections.append(
             {
                 "profile_id": resolved_profile_id,
                 "profile_slot": profile["profile_slot"],
                 "category": profile["category"],
                 "interest_sentence": profile["interest_sentence"],
-                "needs_generation": not rows,
+                "needs_generation": section_needs_generation,
                 "picks": [to_public_pick(row) for row in rows],
             }
         )
@@ -105,6 +109,7 @@ def generate_daily_picks_payload(
     picks_payload = get_daily_picks_payload(
         user_id=request.user_id,
         profile_id=request.profile_id,
+        run_ids=summary["run_ids"],
     )
 
     recommendations_by_run_profile = summary.get("recommendations_by_run_profile", {})

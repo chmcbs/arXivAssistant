@@ -76,11 +76,12 @@ def _resolve_profile(user_id: str, profile_id: str | None, conn=None) -> dict:
     )
     return profile if isinstance(profile, dict) else asdict(profile)
 
-def _fetch_latest_picks(profile_id: str, conn=None):
+def _fetch_latest_picks(profile_id: str, run_ids: list[str] | None = None, conn=None):
     return fetch_latest_picks(
         profile_id=profile_id,
         connect=psycopg.connect,
         database_url=get_database_url(),
+        run_ids=run_ids,
         conn=conn,
     )
 
@@ -108,6 +109,7 @@ def _run_pipeline(**kwargs):
 def get_daily_picks_payload(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    run_ids: list[str] | None = None,
     uow: ApiUnitOfWork | None = None,
     conn=None,
 ) -> dict:
@@ -116,6 +118,7 @@ def get_daily_picks_payload(
             return get_daily_picks_payload_service(
                 user_id=user_id,
                 profile_id=profile_id,
+                anchored_run_ids=run_ids,
                 resolve_profile=lambda user_id, profile_id: _resolve_profile(
                     user_id=user_id,
                     profile_id=profile_id,
@@ -127,6 +130,7 @@ def get_daily_picks_payload(
                 ),
                 fetch_latest_picks=lambda profile_id: _fetch_latest_picks(
                     profile_id=profile_id,
+                    run_ids=run_ids,
                     conn=active_uow.conn,
                 ),
             )
@@ -182,9 +186,10 @@ def generate_daily_picks_payload(
                     conn=active_uow.conn,
                 ),
                 run_pipeline=run_pipeline_with_uow,
-                get_daily_picks_payload=lambda user_id, profile_id: get_daily_picks_payload(
+                get_daily_picks_payload=lambda user_id, profile_id, run_ids=None: get_daily_picks_payload(
                     user_id=user_id,
                     profile_id=profile_id,
+                    run_ids=run_ids if run_ids is not None else active_uow.generated_run_ids,
                     uow=active_uow,
                 ),
             )

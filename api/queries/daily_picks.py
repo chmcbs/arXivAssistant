@@ -40,6 +40,41 @@ JOIN runs r ON r.run_id = rec.run_id
 ORDER BY rec.rank ASC;
 """
 
+LATEST_DAILY_PICKS_FOR_RUNS_SQL = """
+WITH latest_run AS (
+    SELECT
+        run_id,
+        MAX(generated_at) AS generated_at
+    FROM recommendations
+    WHERE profile_id = %s
+      AND run_id::text = ANY(%s)
+    GROUP BY run_id
+    ORDER BY MAX(generated_at) DESC
+    LIMIT 1
+)
+SELECT
+    rec.rank,
+    p.arxiv_id,
+    p.title,
+    COALESCE(p.abstract, '') AS abstract,
+    p.pdf_url,
+    rec.run_id::text,
+    r.category,
+    rec.generated_at,
+    rec.base_dense_score,
+    rec.keyword_boost,
+    rec.final_score,
+    rec.candidate_window,
+    rec.fallback_stage
+FROM latest_run lr
+JOIN recommendations rec
+  ON rec.run_id = lr.run_id
+ AND rec.profile_id = %s
+JOIN papers p ON p.arxiv_id = rec.arxiv_id
+JOIN runs r ON r.run_id = rec.run_id
+ORDER BY rec.rank ASC;
+"""
+
 RESOLVE_PROFILE_SQL = """
 SELECT profile_id::text, user_id, profile_slot, category, interest_sentence, created_at
 FROM user_profiles
@@ -76,16 +111,23 @@ def fetch_latest_picks(
     profile_id: str,
     connect: Callable,
     database_url: str,
+    run_ids: list[str] | None = None,
     conn=None,
 ) -> list[DailyPickRow]:
+    query = LATEST_DAILY_PICKS_SQL
+    params = (profile_id, profile_id)
+    if run_ids:
+        query = LATEST_DAILY_PICKS_FOR_RUNS_SQL
+        params = (profile_id, list(dict.fromkeys(run_ids)), profile_id)
+
     if conn is None:
         with connect(database_url) as conn:
             with conn.cursor() as cur:
-                cur.execute(LATEST_DAILY_PICKS_SQL, (profile_id, profile_id))
+                cur.execute(query, params)
                 rows = cur.fetchall()
     else:
         with conn.cursor() as cur:
-            cur.execute(LATEST_DAILY_PICKS_SQL, (profile_id, profile_id))
+            cur.execute(query, params)
             rows = cur.fetchall()
 
     return [

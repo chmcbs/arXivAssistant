@@ -142,6 +142,27 @@ def test_get_daily_picks_returns_multi_profile_sections():
     assert payload["sections"][1]["needs_generation"] is True
     assert payload["sections"][1]["picks"] == []
 
+def test_get_daily_picks_anchored_run_ids_treat_empty_as_generated():
+    payload = get_daily_picks_payload(
+        user_id="default",
+        profile_id=None,
+        anchored_run_ids=["run-123"],
+        resolve_profile=Mock(
+            return_value={
+                "profile_id": "profile-1",
+                "profile_slot": 1,
+                "category": "cs.AI",
+                "interest_sentence": "Efficient LLM systems",
+            }
+        ),
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
+        fetch_latest_picks=Mock(return_value=[]),
+    )
+
+    assert payload["needs_generation"] is False
+    assert payload["sections"][0]["needs_generation"] is False
+    assert payload["sections"][0]["picks"] == []
+
 def test_get_debug_daily_picks_includes_ranking_metadata():
     payload = get_debug_daily_picks_payload(
         user_id="default",
@@ -166,6 +187,32 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
             "recommendations_by_run": {"run-123": [{"rank": 1}, {"rank": 2}]},
         }
     )
+    get_daily_picks = Mock(
+        return_value={
+            "user_id": "default",
+            "profile_id": "profile-1",
+            "needs_generation": False,
+            "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
+            "sections": [
+                {
+                    "profile_id": "profile-1",
+                    "profile_slot": 1,
+                    "category": "cs.AI",
+                    "interest_sentence": "Efficient LLM systems",
+                    "needs_generation": False,
+                    "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
+                },
+                {
+                    "profile_id": "profile-2",
+                    "profile_slot": 2,
+                    "category": "cs.CL",
+                    "interest_sentence": "Robust NLP evaluation",
+                    "needs_generation": False,
+                    "picks": [{"rank": 1, "arxiv_id": "2601.00002"}],
+                },
+            ],
+        }
+    )
 
     payload = generate_daily_picks_payload(
         GenerateDailyPicksRequest(
@@ -177,32 +224,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         resolve_profile=Mock(),
         list_digest_selected_profile_ids=Mock(return_value=["profile-1", "profile-2"]),
         run_pipeline=run_pipeline,
-        get_daily_picks_payload=Mock(
-            return_value={
-                "user_id": "default",
-                "profile_id": "profile-1",
-                "needs_generation": False,
-                "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
-                "sections": [
-                    {
-                        "profile_id": "profile-1",
-                        "profile_slot": 1,
-                        "category": "cs.AI",
-                        "interest_sentence": "Efficient LLM systems",
-                        "needs_generation": False,
-                        "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
-                    },
-                    {
-                        "profile_id": "profile-2",
-                        "profile_slot": 2,
-                        "category": "cs.CL",
-                        "interest_sentence": "Robust NLP evaluation",
-                        "needs_generation": False,
-                        "picks": [{"rank": 1, "arxiv_id": "2601.00002"}],
-                    },
-                ],
-            }
-        ),
+        get_daily_picks_payload=get_daily_picks,
     )
 
     run_pipeline.assert_called_once_with(
@@ -210,6 +232,11 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         profile_ids=["profile-1", "profile-2"],
         max_results=123,
         embedding_limit=456,
+    )
+    get_daily_picks.assert_called_once_with(
+        user_id="default",
+        profile_id=None,
+        run_ids=["run-123"],
     )
     assert payload["profile_id"] == "profile-1"
     assert payload["generated_profile_ids"] == ["profile-1", "profile-2"]
@@ -402,7 +429,7 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     monkeypatch.setattr(
         dependencies,
         "_fetch_latest_picks",
-        lambda profile_id, conn=None: seen.setdefault("picks_conn", conn) or [],
+        lambda profile_id, run_ids=None, conn=None: seen.setdefault("picks_conn", conn) or [],
     )
 
     payload = dependencies.get_daily_picks_payload(user_id="default", profile_id="profile-1")
@@ -411,3 +438,52 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     assert seen["resolve_conn"] is sentinel_conn
     assert seen["list_conn"] is sentinel_conn
     assert seen["picks_conn"] is sentinel_conn
+
+def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch):
+    sentinel_conn = object()
+    sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
+    seen = {}
+
+    @contextmanager
+    def fake_uow(uow=None, conn=None):
+        assert uow is None
+        assert conn is None
+        yield sentinel_uow
+
+    def fake_service(**kwargs):
+        kwargs["fetch_latest_picks"]("profile-1")
+        return {"ok": True}
+
+    monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
+    monkeypatch.setattr(dependencies, "get_daily_picks_payload_service", fake_service)
+    monkeypatch.setattr(
+        dependencies,
+        "_resolve_profile",
+        lambda user_id, profile_id, conn=None: {},
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "list_digest_selected_profile_ids",
+        lambda user_id, conn=None: [],
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "_fetch_latest_picks",
+        lambda profile_id, run_ids=None, conn=None: seen.setdefault(
+            "call",
+            {"profile_id": profile_id, "run_ids": run_ids, "conn": conn},
+        ) or [],
+    )
+
+    payload = dependencies.get_daily_picks_payload(
+        user_id="default",
+        profile_id="profile-1",
+        run_ids=["run-1", "run-2"],
+    )
+
+    assert payload == {"ok": True}
+    assert seen["call"] == {
+        "profile_id": "profile-1",
+        "run_ids": ["run-1", "run-2"],
+        "conn": sentinel_conn,
+    }
