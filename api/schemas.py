@@ -5,7 +5,7 @@ Pydantic models used by API routes and helper payloads
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field
-from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
+from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 
 class PublicPick(BaseModel):
     rank: int

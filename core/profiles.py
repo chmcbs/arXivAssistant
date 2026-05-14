@@ -4,9 +4,9 @@ User profile model and helpers
 
 import uuid
 import psycopg
-from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
-from db_helper import get_database_url
-from keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
+from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
+from core.db import get_database_url
+from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
 
 MAX_PROFILES_PER_USER = 3
 

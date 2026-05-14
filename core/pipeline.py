@@ -2,12 +2,12 @@
 Runs the end-to-end recommendation pipeline
 """
 
-from config import DEFAULT_USER_ID
-from db_setup import main as setup_database
-from embeddings import run_embeddings
-from ingestion import run_ingestion
-from profiles import get_or_create_default_profile
-from recommendations import generate_recommendations
+from core.config import DEFAULT_USER_ID
+from core.schema import main as setup_database
+from core.embeddings import run_embeddings
+from core.ingestion import run_ingestion
+from core.profiles import get_or_create_default_profile
+from core.recommendations import generate_recommendations
 
 def run_pipeline(
     user_id: str = DEFAULT_USER_ID,

@@ -4,10 +4,10 @@ Helpers to wire dependencies into services
 
 import psycopg
 from fastapi import HTTPException
-from config import DEFAULT_USER_ID, get_arxiv_categories
-from db_helper import get_database_url
-from preferences import initialize_preference_embedding, save_feedback, update_preference_embedding
-from profiles import (
+from core.config import DEFAULT_USER_ID, get_arxiv_categories
+from core.db import get_database_url
+from core.preferences import initialize_preference_embedding, save_feedback, update_preference_embedding
+from core.profiles import (
     add_profile_keyword,
     create_profile,
     get_or_create_default_profile,
@@ -87,7 +87,7 @@ def _fetch_metrics_rows(latest_runs_limit: int):
     )
 
 def _run_pipeline(**kwargs):
-    from pipeline import run_pipeline
+    from core.pipeline import run_pipeline
 
     return run_pipeline(**kwargs)
 

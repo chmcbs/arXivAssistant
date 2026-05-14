@@ -3,7 +3,7 @@ HTTP route definitions for the API service
 """
 
 from fastapi import FastAPI, HTTPException
-from config import DEFAULT_USER_ID
+from core.config import DEFAULT_USER_ID
 from api.handlers import (
     add_profile_keyword_payload,
     create_profile_payload,

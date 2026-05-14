@@ -4,8 +4,8 @@ Tests the ingestion pipeline
 
 from unittest.mock import MagicMock, Mock
 import pytest
-import ingestion
-from ingestion import clean_id
+from core import ingestion
+from core.ingestion import clean_id
 
 def test_clean_id_removes_arxiv_version_suffix():
     assert clean_id("2401.12345v2") == "2401.12345"

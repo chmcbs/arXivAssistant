@@ -4,7 +4,7 @@ Tests recommendation generation and persistence
 
 from unittest.mock import MagicMock, Mock
 import pytest
-import recommendations
+from core import recommendations
 
 def _mock_connection_with_cursor(cursor):
     connection = MagicMock()

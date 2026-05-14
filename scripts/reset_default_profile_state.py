@@ -3,10 +3,10 @@ Resets local recommendation state for the default profile
 """
 
 import psycopg
-from config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID
-from db_helper import get_database_url
-from preferences import initialize_preference_embedding
-from profiles import get_or_create_default_profile
+from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID
+from core.db import get_database_url
+from core.preferences import initialize_preference_embedding
+from core.profiles import get_or_create_default_profile
 
 def reset_default_profile_state(
     user_id: str = DEFAULT_USER_ID,

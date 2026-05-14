@@ -3,7 +3,7 @@ Tests the full recommendation pipeline
 """
 
 from unittest.mock import Mock
-import pipeline
+from core import pipeline
 
 def test_run_pipeline_calls_steps_in_order(monkeypatch):
     calls = []

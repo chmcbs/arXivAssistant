@@ -3,8 +3,8 @@ Creates the Postgres schema
 """
 
 import psycopg
-from db_helper import get_database_url
-from keyword_search import PAPER_SEARCH_VECTOR_SQL
+from core.db import get_database_url
+from core.keyword_search import PAPER_SEARCH_VECTOR_SQL
 
 ########################################
 ############### PAPERS #################
@@ -181,6 +181,7 @@ CREATE INDEX IF NOT EXISTS recommendations_profile_paper_generated_idx
 ON recommendations (profile_id, arxiv_id, generated_at DESC);
 """
 
+
 def main():
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
@@ -202,6 +203,7 @@ def main():
             cur.execute(ALTER_RECOMMENDATIONS_ADD_KEYWORD_BOOST)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_PAPER_GENERATED_INDEX)
+
 
 if __name__ == "__main__":
     main()

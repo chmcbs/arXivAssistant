@@ -4,10 +4,10 @@ Generates top-K recommendations per (run_id, profile_id)
 
 import uuid
 import psycopg
-from config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
-from db_helper import get_database_url
-from keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
-from profiles import get_or_create_default_profile
+from core.config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
+from core.db import get_database_url
+from core.keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
+from core.profiles import get_or_create_default_profile
 
 FETCH_RUN_SQL = """
 SELECT run_id, category, max_results

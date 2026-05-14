@@ -3,7 +3,7 @@ Tests config module helpers
 """
 
 import pytest
-import config
+from core import config
 
 def test_get_arxiv_categories_uses_default(monkeypatch):
     monkeypatch.delenv("ARXIV_CATEGORIES", raising=False)

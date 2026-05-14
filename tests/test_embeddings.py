@@ -3,8 +3,8 @@ Tests the embeddings pipeline
 """
 
 from unittest.mock import MagicMock, Mock
-import embeddings
-from embeddings import paper_text
+from core import embeddings
+from core.embeddings import paper_text
 
 def test_paper_text_combines_title_and_abstract():
     paper = {

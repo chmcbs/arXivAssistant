@@ -3,12 +3,12 @@ Preference embedding and feedback handling
 """
 
 import psycopg
-from embeddings import embed_texts
+from core.embeddings import embed_texts
 import uuid
-from config import DEFAULT_USER_ID
-from db_helper import get_database_url
-from profiles import get_or_create_default_profile
-from vector_helper import vector_literal
+from core.config import DEFAULT_USER_ID
+from core.db import get_database_url
+from core.profiles import get_or_create_default_profile
+from core.vector_helper import vector_literal
 
 # Convert pgvector strings to lists
 def coerce_vector(raw_vector) -> list[float]:

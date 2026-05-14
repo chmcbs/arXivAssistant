@@ -6,8 +6,8 @@ import re
 import arxiv
 import psycopg
 import uuid
-from db_helper import get_database_url
-from config import get_arxiv_categories
+from core.db import get_database_url
+from core.config import get_arxiv_categories
 
 def fetch_papers(
     category: str = 'cs.AI',

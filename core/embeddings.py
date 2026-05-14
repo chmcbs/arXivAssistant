@@ -3,7 +3,7 @@ Reads papers without embeddings, generates vectors, and stores them in the paper
 """
 
 import psycopg
-from db_helper import get_database_url
+from core.db import get_database_url
 from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"

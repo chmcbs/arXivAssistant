@@ -4,7 +4,7 @@ Tests user profile helpers
 
 from unittest.mock import MagicMock, Mock
 import pytest
-import profiles
+from core import profiles
 
 def _mock_connection_with_cursor(cursor):
     connection = MagicMock()

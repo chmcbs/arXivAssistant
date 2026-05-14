@@ -1,5 +1,5 @@
 """
-Database connection helper
+Database connection utilities
 """
 
 import os

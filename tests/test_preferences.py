@@ -4,7 +4,7 @@ Tests preference embedding and feedback handling
 
 from unittest.mock import MagicMock, Mock
 import pytest
-import preferences
+from core import preferences
 
 def test_mean_vector_averages_vectors():
     assert preferences.mean_vector(
