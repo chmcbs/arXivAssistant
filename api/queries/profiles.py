@@ -47,8 +47,14 @@ def fetch_profiles_for_user(
     user_id: str,
     connect: Callable,
     database_url: str,
+    conn=None,
 ) -> list[ProfileSummaryRow]:
-    with connect(database_url) as conn:
+    if conn is None:
+        with connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(PROFILE_LIST_SQL, (user_id,))
+                rows = cur.fetchall()
+    else:
         with conn.cursor() as cur:
             cur.execute(PROFILE_LIST_SQL, (user_id,))
             rows = cur.fetchall()

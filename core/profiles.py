@@ -5,6 +5,7 @@ User profile model and helpers
 import uuid
 import psycopg
 from dataclasses import dataclass
+from contextlib import contextmanager
 from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 from core.db import get_database_url
 from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
@@ -128,6 +129,15 @@ WHERE user_id = %s
   AND profile_id = ANY(%s::uuid[]);
 """
 
+@contextmanager
+def _connection_scope(conn=None):
+    if conn is not None:
+        yield conn
+        return
+
+    with psycopg.connect(get_database_url()) as owned_conn:
+        yield owned_conn
+
 def _validate_interest_sentence(interest_sentence: str) -> str:
     value = interest_sentence.strip()
     if not value:
@@ -156,6 +166,7 @@ def create_profile(
     user_id: str = DEFAULT_USER_ID,
     category: str | None = None,
     interest_sentence: str = DEFAULT_INTEREST_TEXT,
+    conn=None,
 ) -> str:
     validated_interest = _validate_interest_sentence(interest_sentence)
     validated_category = _validate_category(
@@ -163,8 +174,8 @@ def create_profile(
     )
     profile_id = str(uuid.uuid4())
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(LOCK_OCCUPIED_SLOTS_SQL, (user_id,))
             occupied_slots = {int(row[0]) for row in cur.fetchall()}
 
@@ -183,9 +194,9 @@ def create_profile(
 
     return profile_id
 
-def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[ProfileRow]:
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+def list_profiles(user_id: str = DEFAULT_USER_ID, conn=None) -> list[ProfileRow]:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(LIST_PROFILES_SQL, (user_id,))
             rows = cur.fetchall()
 
@@ -202,9 +213,9 @@ def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[ProfileRow]:
         for row in rows
     ]
 
-def get_profile(profile_id: str) -> ProfileRow | None:
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+def get_profile(profile_id: str, conn=None) -> ProfileRow | None:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(GET_PROFILE_SQL, (profile_id,))
             row = cur.fetchone()
 
@@ -225,17 +236,30 @@ def get_or_create_default_profile(
     user_id: str = DEFAULT_USER_ID,
     category: str | None = None,
     interest_sentence: str = DEFAULT_INTEREST_TEXT,
+    conn=None,
 ) -> ProfileRow:
-    profiles = list_profiles(user_id=user_id)
+    if conn is None:
+        profiles = list_profiles(user_id=user_id)
+    else:
+        profiles = list_profiles(user_id=user_id, conn=conn)
     if profiles:
         return profiles[0]
 
-    profile_id = create_profile(
-        user_id=user_id,
-        category=category,
-        interest_sentence=interest_sentence,
-    )
-    profile = get_profile(profile_id)
+    if conn is None:
+        profile_id = create_profile(
+            user_id=user_id,
+            category=category,
+            interest_sentence=interest_sentence,
+        )
+        profile = get_profile(profile_id)
+    else:
+        profile_id = create_profile(
+            user_id=user_id,
+            category=category,
+            interest_sentence=interest_sentence,
+            conn=conn,
+        )
+        profile = get_profile(profile_id, conn=conn)
     if profile is None:
         raise ValueError("failed to create default profile")
     return profile
@@ -243,19 +267,21 @@ def get_or_create_default_profile(
 def resolve_profile_id(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    conn=None,
 ) -> str:
     if profile_id:
         return profile_id
 
-    profile = get_or_create_default_profile(user_id=user_id)
+    profile = get_or_create_default_profile(user_id=user_id, conn=conn)
     return str(profile.profile_id)
 
 def list_profile_keywords(
     profile_id: str,
     user_id: str = DEFAULT_USER_ID,
+    conn=None,
 ) -> list[str]:
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
@@ -269,11 +295,12 @@ def add_profile_keyword(
     profile_id: str,
     keyword: str,
     user_id: str = DEFAULT_USER_ID,
+    conn=None,
 ) -> list[str]:
     normalized_keyword = normalize_keyword(keyword)
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
@@ -297,11 +324,12 @@ def remove_profile_keyword(
     profile_id: str,
     keyword: str,
     user_id: str = DEFAULT_USER_ID,
+    conn=None,
 ) -> list[str]:
     normalized_keyword = normalize_keyword(keyword)
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
@@ -313,9 +341,9 @@ def remove_profile_keyword(
 
     return [row[0] for row in rows]
 
-def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID) -> list[str]:
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID, conn=None) -> list[str]:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(LIST_DIGEST_SELECTED_SQL, (user_id,))
             rows = cur.fetchall()
 
@@ -324,13 +352,14 @@ def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID) -> list[str
 def set_digest_profile_selection(
     profile_ids: list[str],
     user_id: str = DEFAULT_USER_ID,
+    conn=None,
 ) -> list[str]:
     requested_profile_ids = list(dict.fromkeys(profile_ids))
     if not requested_profile_ids:
         raise ValueError("at least one profile must be selected for digest generation")
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(MATCH_USER_PROFILES_SQL, (user_id, requested_profile_ids))
             matched_ids = {row[0] for row in cur.fetchall()}
             missing_ids = sorted(set(requested_profile_ids) - matched_ids)

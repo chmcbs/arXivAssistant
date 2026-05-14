@@ -27,6 +27,7 @@ from api.schemas import (
     ManageProfileKeywordRequest,
     UpdateDigestSelectionRequest,
 )
+from api.unit_of_work import ApiUnitOfWork, open_api_unit_of_work
 from api.services.common import resolve_profile
 from api.services.daily_picks import (
     generate_daily_picks_payload as generate_daily_picks_payload_service,
@@ -50,42 +51,53 @@ def _to_http_exception(error: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(error))
     return HTTPException(status_code=400, detail=str(error))
 
-def _fetch_profile_by_id(profile_id: str, user_id: str):
+def _fetch_profile_by_id(profile_id: str, user_id: str, conn=None):
     return fetch_profile_by_id(
         profile_id=profile_id,
         user_id=user_id,
         connect=psycopg.connect,
         database_url=get_database_url(),
+        conn=conn,
     )
 
-def _resolve_profile(user_id: str, profile_id: str | None) -> dict:
+def _resolve_profile(user_id: str, profile_id: str | None, conn=None) -> dict:
     profile = resolve_profile(
         user_id=user_id,
         profile_id=profile_id,
-        fetch_profile_by_id=_fetch_profile_by_id,
-        get_or_create_default_profile=get_or_create_default_profile,
+        fetch_profile_by_id=lambda profile_id, user_id: _fetch_profile_by_id(
+            profile_id=profile_id,
+            user_id=user_id,
+            conn=conn,
+        ),
+        get_or_create_default_profile=lambda user_id: get_or_create_default_profile(
+            user_id=user_id,
+            conn=conn,
+        ),
     )
     return profile if isinstance(profile, dict) else asdict(profile)
 
-def _fetch_latest_picks(profile_id: str):
+def _fetch_latest_picks(profile_id: str, conn=None):
     return fetch_latest_picks(
         profile_id=profile_id,
         connect=psycopg.connect,
         database_url=get_database_url(),
+        conn=conn,
     )
 
-def _fetch_profiles_for_user(user_id: str):
+def _fetch_profiles_for_user(user_id: str, conn=None):
     return fetch_profiles_for_user(
         user_id=user_id,
         connect=psycopg.connect,
         database_url=get_database_url(),
+        conn=conn,
     )
 
-def _fetch_metrics_rows(latest_runs_limit: int):
+def _fetch_metrics_rows(latest_runs_limit: int, conn=None):
     return fetch_metrics_rows(
         latest_runs_limit=latest_runs_limit,
         connect=psycopg.connect,
         database_url=get_database_url(),
+        conn=conn,
     )
 
 def _run_pipeline(**kwargs):
@@ -96,129 +108,238 @@ def _run_pipeline(**kwargs):
 def get_daily_picks_payload(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
 ) -> dict:
     try:
-        return get_daily_picks_payload_service(
-            user_id=user_id,
-            profile_id=profile_id,
-            resolve_profile=_resolve_profile,
-            list_digest_selected_profile_ids=list_digest_selected_profile_ids,
-            fetch_latest_picks=_fetch_latest_picks,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return get_daily_picks_payload_service(
+                user_id=user_id,
+                profile_id=profile_id,
+                resolve_profile=lambda user_id, profile_id: _resolve_profile(
+                    user_id=user_id,
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+                list_digest_selected_profile_ids=lambda user_id: list_digest_selected_profile_ids(
+                    user_id=user_id,
+                    conn=active_uow.conn,
+                ),
+                fetch_latest_picks=lambda profile_id: _fetch_latest_picks(
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
 def get_debug_daily_picks_payload(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
 ) -> dict:
     try:
-        return get_debug_daily_picks_payload_service(
-            user_id=user_id,
-            profile_id=profile_id,
-            resolve_profile=_resolve_profile,
-            fetch_latest_picks=_fetch_latest_picks,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return get_debug_daily_picks_payload_service(
+                user_id=user_id,
+                profile_id=profile_id,
+                resolve_profile=lambda user_id, profile_id: _resolve_profile(
+                    user_id=user_id,
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+                fetch_latest_picks=lambda profile_id: _fetch_latest_picks(
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def generate_daily_picks_payload(request: GenerateDailyPicksRequest) -> dict:
+def generate_daily_picks_payload(
+    request: GenerateDailyPicksRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return generate_daily_picks_payload_service(
-            request=request,
-            get_arxiv_categories=get_arxiv_categories,
-            resolve_profile=_resolve_profile,
-            list_digest_selected_profile_ids=list_digest_selected_profile_ids,
-            run_pipeline=_run_pipeline,
-            get_daily_picks_payload=get_daily_picks_payload,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            def run_pipeline_with_uow(**kwargs):
+                summary = _run_pipeline(**kwargs)
+                active_uow.set_generated_run_ids(summary.get("run_ids", []))
+                return summary
+
+            return generate_daily_picks_payload_service(
+                request=request,
+                get_arxiv_categories=get_arxiv_categories,
+                resolve_profile=lambda user_id, profile_id: _resolve_profile(
+                    user_id=user_id,
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+                list_digest_selected_profile_ids=lambda user_id: list_digest_selected_profile_ids(
+                    user_id=user_id,
+                    conn=active_uow.conn,
+                ),
+                run_pipeline=run_pipeline_with_uow,
+                get_daily_picks_payload=lambda user_id, profile_id: get_daily_picks_payload(
+                    user_id=user_id,
+                    profile_id=profile_id,
+                    uow=active_uow,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def save_feedback_payload(request: FeedbackRequest) -> dict:
+def save_feedback_payload(
+    request: FeedbackRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return save_feedback_payload_service(
-            request=request,
-            resolve_profile=_resolve_profile,
-            save_feedback=save_feedback,
-            update_preference_embedding=update_preference_embedding,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return save_feedback_payload_service(
+                request=request,
+                resolve_profile=lambda user_id, profile_id: _resolve_profile(
+                    user_id=user_id,
+                    profile_id=profile_id,
+                    conn=active_uow.conn,
+                ),
+                save_feedback=lambda **kwargs: save_feedback(conn=active_uow.conn, **kwargs),
+                update_preference_embedding=lambda **kwargs: update_preference_embedding(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def create_profile_payload(request: CreateProfileRequest) -> dict:
+def create_profile_payload(
+    request: CreateProfileRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return create_profile_payload_service(
-            request=request,
-            create_profile=create_profile,
-            initialize_preference_embedding=initialize_preference_embedding,
-            list_profiles_payload=list_profiles_payload,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return create_profile_payload_service(
+                request=request,
+                create_profile=lambda **kwargs: create_profile(conn=active_uow.conn, **kwargs),
+                initialize_preference_embedding=lambda **kwargs: initialize_preference_embedding(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+                list_profiles_payload=lambda user_id: list_profiles_payload(
+                    user_id=user_id,
+                    uow=active_uow,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def list_profiles_payload(user_id: str = DEFAULT_USER_ID) -> dict:
+def list_profiles_payload(
+    user_id: str = DEFAULT_USER_ID,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return list_profiles_payload_service(
-            user_id=user_id,
-            fetch_profiles_for_user=_fetch_profiles_for_user,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return list_profiles_payload_service(
+                user_id=user_id,
+                fetch_profiles_for_user=lambda user_id: _fetch_profiles_for_user(
+                    user_id=user_id,
+                    conn=active_uow.conn,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def update_digest_selection_payload(request: UpdateDigestSelectionRequest) -> dict:
+def update_digest_selection_payload(
+    request: UpdateDigestSelectionRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return update_digest_selection_payload_service(
-            request=request,
-            set_digest_profile_selection=set_digest_profile_selection,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return update_digest_selection_payload_service(
+                request=request,
+                set_digest_profile_selection=lambda **kwargs: set_digest_profile_selection(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
 def add_profile_keyword_payload(
     profile_id: str,
     request: ManageProfileKeywordRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
 ) -> dict:
     try:
-        return add_profile_keyword_payload_service(
-            profile_id=profile_id,
-            request=request,
-            add_profile_keyword=add_profile_keyword,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return add_profile_keyword_payload_service(
+                profile_id=profile_id,
+                request=request,
+                add_profile_keyword=lambda **kwargs: add_profile_keyword(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
 def remove_profile_keyword_payload(
     profile_id: str,
     request: ManageProfileKeywordRequest,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
 ) -> dict:
     try:
-        return remove_profile_keyword_payload_service(
-            profile_id=profile_id,
-            request=request,
-            remove_profile_keyword=remove_profile_keyword,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return remove_profile_keyword_payload_service(
+                profile_id=profile_id,
+                request=request,
+                remove_profile_keyword=lambda **kwargs: remove_profile_keyword(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
 def list_profile_keywords_payload(
     profile_id: str,
     user_id: str = DEFAULT_USER_ID,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
 ) -> dict:
     try:
-        return list_profile_keywords_payload_service(
-            profile_id=profile_id,
-            user_id=user_id,
-            list_profile_keywords=list_profile_keywords,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return list_profile_keywords_payload_service(
+                profile_id=profile_id,
+                user_id=user_id,
+                list_profile_keywords=lambda **kwargs: list_profile_keywords(
+                    conn=active_uow.conn,
+                    **kwargs,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error
 
-def get_metrics_payload(latest_runs_limit: int = 10) -> dict:
+def get_metrics_payload(
+    latest_runs_limit: int = 10,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
     try:
-        return get_metrics_payload_service(
-            latest_runs_limit=latest_runs_limit,
-            fetch_metrics_rows=_fetch_metrics_rows,
-        )
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return get_metrics_payload_service(
+                latest_runs_limit=latest_runs_limit,
+                fetch_metrics_rows=lambda latest_runs_limit: _fetch_metrics_rows(
+                    latest_runs_limit=latest_runs_limit,
+                    conn=active_uow.conn,
+                ),
+            )
     except ValueError as error:
         raise _to_http_exception(error) from error

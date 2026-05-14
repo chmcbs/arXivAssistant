@@ -76,8 +76,14 @@ def fetch_latest_picks(
     profile_id: str,
     connect: Callable,
     database_url: str,
+    conn=None,
 ) -> list[DailyPickRow]:
-    with connect(database_url) as conn:
+    if conn is None:
+        with connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(LATEST_DAILY_PICKS_SQL, (profile_id, profile_id))
+                rows = cur.fetchall()
+    else:
         with conn.cursor() as cur:
             cur.execute(LATEST_DAILY_PICKS_SQL, (profile_id, profile_id))
             rows = cur.fetchall()
@@ -106,8 +112,14 @@ def fetch_profile_by_id(
     user_id: str,
     connect: Callable,
     database_url: str,
+    conn=None,
 ) -> ResolvedProfileRow | None:
-    with connect(database_url) as conn:
+    if conn is None:
+        with connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(RESOLVE_PROFILE_SQL, (profile_id, user_id))
+                row = cur.fetchone()
+    else:
         with conn.cursor() as cur:
             cur.execute(RESOLVE_PROFILE_SQL, (profile_id, user_id))
             row = cur.fetchone()

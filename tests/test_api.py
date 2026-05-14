@@ -3,8 +3,10 @@ Tests FastAPI service helpers
 """
 
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from unittest.mock import Mock
 import pytest
+import api.dependencies as dependencies
 from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
 from api.schemas import (
@@ -367,3 +369,45 @@ def test_get_metrics_payload_returns_run_and_recommendation_counts():
     assert payload["latest_runs"][0]["run_id"] == "run-123"
     assert payload["total_recommendations"] == 3
     assert payload["recommendations_by_profile"] == {"profile-1": 3}
+
+def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
+    sentinel_conn = object()
+    sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
+    seen = {}
+
+    @contextmanager
+    def fake_uow(uow=None, conn=None):
+        assert uow is None
+        assert conn is None
+        yield sentinel_uow
+
+    def fake_service(**kwargs):
+        kwargs["resolve_profile"]("default", "profile-1")
+        kwargs["list_digest_selected_profile_ids"]("default")
+        kwargs["fetch_latest_picks"]("profile-1")
+        return {"ok": True}
+
+    monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
+    monkeypatch.setattr(dependencies, "get_daily_picks_payload_service", fake_service)
+    monkeypatch.setattr(
+        dependencies,
+        "_resolve_profile",
+        lambda user_id, profile_id, conn=None: seen.setdefault("resolve_conn", conn) or {},
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "list_digest_selected_profile_ids",
+        lambda user_id, conn=None: seen.setdefault("list_conn", conn) or [],
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "_fetch_latest_picks",
+        lambda profile_id, conn=None: seen.setdefault("picks_conn", conn) or [],
+    )
+
+    payload = dependencies.get_daily_picks_payload(user_id="default", profile_id="profile-1")
+
+    assert payload == {"ok": True}
+    assert seen["resolve_conn"] is sentinel_conn
+    assert seen["list_conn"] is sentinel_conn
+    assert seen["picks_conn"] is sentinel_conn

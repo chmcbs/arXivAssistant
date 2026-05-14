@@ -4,6 +4,7 @@ Preference embedding and feedback handling
 
 import psycopg
 from dataclasses import dataclass
+from contextlib import contextmanager
 from core.embeddings import embed_texts
 import uuid
 from core.config import DEFAULT_USER_ID
@@ -68,6 +69,15 @@ SET preference_embedding = %s::vector,
 WHERE profile_id = %s;
 """
 
+@contextmanager
+def _connection_scope(conn=None):
+    if conn is not None:
+        yield conn
+        return
+
+    with psycopg.connect(get_database_url()) as owned_conn:
+        yield owned_conn
+
 # Convert pgvector strings to lists
 def coerce_vector(raw_vector) -> list[float]:
     if isinstance(raw_vector, str):
@@ -87,12 +97,13 @@ def initialize_preference_embedding(
     interest_text: str,
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    conn=None,
 ) -> str:
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(
                 UPSERT_PREFERENCE_EMBEDDING_SQL,
                 (
@@ -109,15 +120,16 @@ def save_feedback(
     label: str,
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    conn=None,
 ) -> str:
     if label not in {"like", "dislike"}:
         raise ValueError("label must be 'like' or 'dislike'")
 
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
     feedback_id = str(uuid.uuid4())
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(UPSERT_FEEDBACK_SQL, (feedback_id, resolved_profile_id, arxiv_id, label))
             row = cur.fetchone()
 
@@ -182,11 +194,12 @@ def compute_preference_vector(
 def update_preference_embedding(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
+    conn=None,
 ) -> None:
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(FETCH_PREFERENCE_AND_FEEDBACK_SQL, (resolved_profile_id,))
             raw_rows = cur.fetchall()
 
@@ -234,6 +247,6 @@ def update_preference_embedding(
     preference_vector = normalize_vector(preference_vector)
     preference_vector_literal = vector_literal(preference_vector)
 
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
             cur.execute(UPDATE_PREFERENCE_EMBEDDING_SQL, (preference_vector_literal, resolved_profile_id))
