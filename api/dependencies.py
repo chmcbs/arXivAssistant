@@ -20,34 +20,18 @@ from api.schemas import (
 from api.services.common import resolve_profile
 from api.services.daily_picks import (
     generate_daily_picks_payload as generate_daily_picks_payload_service,
-)
-from api.services.daily_picks import (
     get_daily_picks_payload as get_daily_picks_payload_service,
-)
-from api.services.daily_picks import (
     get_debug_daily_picks_payload as get_debug_daily_picks_payload_service,
-)
-from api.services.daily_picks import (
     save_feedback_payload as save_feedback_payload_service,
 )
 from api.services.errors import InternalServerError, NotFoundError
 from api.services.metrics import get_metrics_payload as get_metrics_payload_service
 from api.services.profiles import (
     add_profile_keyword_payload as add_profile_keyword_payload_service,
-)
-from api.services.profiles import (
     create_profile_payload as create_profile_payload_service,
-)
-from api.services.profiles import (
     list_profile_keywords_payload as list_profile_keywords_payload_service,
-)
-from api.services.profiles import (
     list_profiles_payload as list_profiles_payload_service,
-)
-from api.services.profiles import (
     remove_profile_keyword_payload as remove_profile_keyword_payload_service,
-)
-from api.services.profiles import (
     update_digest_selection_payload as update_digest_selection_payload_service,
 )
 from api.unit_of_work import ApiUnitOfWork, open_api_unit_of_work
