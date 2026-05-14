@@ -169,6 +169,16 @@ def get_or_create_default_profile(
         raise ValueError("failed to create default profile")
     return profile
 
+def resolve_profile_id(
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+) -> str:
+    if profile_id:
+        return profile_id
+
+    profile = get_or_create_default_profile(user_id=user_id)
+    return str(profile["profile_id"])
+
 def list_profile_keywords(
     profile_id: str,
     user_id: str = DEFAULT_USER_ID,

@@ -7,7 +7,7 @@ from core.embeddings import embed_texts
 import uuid
 from core.config import DEFAULT_USER_ID
 from core.db import get_database_url
-from core.profiles import get_or_create_default_profile
+from core.profiles import resolve_profile_id
 from core.vector_helper import vector_literal
 
 # Convert pgvector strings to lists
@@ -24,23 +24,13 @@ def coerce_vector(raw_vector) -> list[float]:
 
     return [float(value) for value in raw_vector]
 
-def _resolve_profile_id(
-    user_id: str = DEFAULT_USER_ID,
-    profile_id: str | None = None,
-) -> str:
-    if profile_id:
-        return profile_id
-
-    profile = get_or_create_default_profile(user_id=user_id)
-    return str(profile["profile_id"])
-
 # Cold start preference embedding
 def initialize_preference_embedding(
     interest_text: str,
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
 ) -> str:
-    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
     sql = """
@@ -83,7 +73,7 @@ def save_feedback(
     if label not in {"like", "dislike"}:
         raise ValueError("label must be 'like' or 'dislike'")
 
-    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
     feedback_id = str(uuid.uuid4())
 
     sql = """
@@ -168,7 +158,7 @@ def update_preference_embedding(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
 ) -> None:
-    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
     sql = """
     SELECT
         pp.initial_interest_embedding,

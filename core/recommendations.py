@@ -7,7 +7,7 @@ import psycopg
 from core.config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
 from core.db import get_database_url
 from core.keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
-from core.profiles import get_or_create_default_profile
+from core.profiles import resolve_profile_id
 
 FETCH_RUN_SQL = """
 SELECT run_id, category, max_results
@@ -287,16 +287,6 @@ VALUES (
 );
 """
 
-def _resolve_profile_id(
-    user_id: str = DEFAULT_USER_ID,
-    profile_id: str | None = None,
-) -> str:
-    if profile_id:
-        return profile_id
-
-    profile = get_or_create_default_profile(user_id=user_id)
-    return str(profile["profile_id"])
-
 # Resolve the number of items to return (override > user preference > default)
 def _get_effective_k(cur, profile_id: str, k_override: int | None) -> int:
     if k_override is not None:
@@ -326,7 +316,7 @@ def generate_recommendations(
     profile_id: str | None = None,
     k_override: int | None = None,
 ) -> list[dict]:
-    resolved_profile_id = _resolve_profile_id(user_id=user_id, profile_id=profile_id)
+    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id)
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
