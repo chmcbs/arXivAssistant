@@ -9,6 +9,10 @@ from core.ingestion import run_ingestion
 from core.profiles import get_or_create_default_profile
 from core.recommendations import generate_recommendations
 
+def _stringify_error(error: Exception) -> str:
+    text = str(error).strip()
+    return text or error.__class__.__name__
+
 def run_pipeline(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
@@ -42,8 +46,10 @@ def run_pipeline(
 
     print("4/4 Generating recommendations...")
     recommendations_by_run_profile: dict[str, dict[str, list[dict]]] = {}
+    recommendation_status_by_run_profile: dict[str, dict[str, dict]] = {}
     for run_id in run_ids:
         recommendations_by_run_profile[run_id] = {}
+        recommendation_status_by_run_profile[run_id] = {}
         for target_profile_id in target_profile_ids:
             try:
                 recommendations = generate_recommendations(
@@ -52,12 +58,22 @@ def run_pipeline(
                     profile_id=target_profile_id,
                 )
                 recommendations_by_run_profile[run_id][target_profile_id] = recommendations
+                recommendation_status_by_run_profile[run_id][target_profile_id] = {
+                    "status": "succeeded",
+                    "recommendation_count": len(recommendations),
+                    "error_message": None,
+                }
                 print(
                     f"Run {run_id}, profile {target_profile_id}: "
                     f"saved {len(recommendations)} recommendation(s)"
                 )
             except Exception as error:
                 recommendations_by_run_profile[run_id][target_profile_id] = []
+                recommendation_status_by_run_profile[run_id][target_profile_id] = {
+                    "status": "failed",
+                    "recommendation_count": 0,
+                    "error_message": _stringify_error(error),
+                }
                 print(
                     f"Run {run_id}, profile {target_profile_id}: "
                     f"recommendation step failed: {error}"
@@ -84,6 +100,7 @@ def run_pipeline(
         "embedded_count": embedded_count,
         "recommendations_by_run": recommendations_by_run,
         "recommendations_by_run_profile": recommendations_by_run_profile,
+        "recommendation_status_by_run_profile": recommendation_status_by_run_profile,
     }
 
 if __name__ == "__main__":

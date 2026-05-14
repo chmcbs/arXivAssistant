@@ -4,7 +4,7 @@ Service functions for daily picks and feedback workflows
 
 from typing import Callable
 from api.mappers import to_debug_pick, to_public_pick
-from api.services.errors import BadRequestError
+from api.services.errors import BadRequestError, InternalServerError
 
 def ensure_single_category_mvp(get_arxiv_categories: Callable[[], list[str]]) -> None:
     categories = get_arxiv_categories()
@@ -113,23 +113,59 @@ def generate_daily_picks_payload(
     )
 
     recommendations_by_run_profile = summary.get("recommendations_by_run_profile", {})
-    recommendation_counts = {
-        run_id: sum(len(profile_rows) for profile_rows in profile_map.values())
-        for run_id, profile_map in recommendations_by_run_profile.items()
-    }
-    if not recommendation_counts:
-        recommendation_counts = {
-            run_id: len(recommendations)
-            for run_id, recommendations in summary["recommendations_by_run"].items()
-        }
+    recommendation_status_by_run_profile = summary.get("recommendation_status_by_run_profile", {})
+    generation_runs = []
+    has_failures = False
+    has_successes = False
+    for run_id in summary["run_ids"]:
+        profile_statuses = []
+        status_map = recommendation_status_by_run_profile.get(run_id, {})
+        recommendation_map = recommendations_by_run_profile.get(run_id, {})
+        for target_profile_id in target_profile_ids:
+            status_entry = status_map.get(target_profile_id)
+            if status_entry is None:
+                recommendation_count = len(recommendation_map.get(target_profile_id, []))
+                status_entry = {
+                    "status": "succeeded",
+                    "recommendation_count": recommendation_count,
+                    "error_message": None,
+                }
+
+            status = status_entry["status"]
+            if status == "failed":
+                has_failures = True
+            if status == "succeeded":
+                has_successes = True
+
+            profile_statuses.append(
+                {
+                    "profile_id": target_profile_id,
+                    "status": status,
+                    "recommendation_count": status_entry.get("recommendation_count", 0),
+                    "error_message": status_entry.get("error_message"),
+                }
+            )
+
+        generation_runs.append(
+            {
+                "run_id": run_id,
+                "profile_statuses": profile_statuses,
+            }
+        )
+
+    if has_failures and not has_successes:
+        raise InternalServerError(
+            "NO_SUCCESSFUL_GENERATION: generation failed for all run/profile targets"
+        )
 
     return {
         "user_id": request.user_id,
-        "profile_id": picks_payload["profile_id"],
-        "generated_profile_ids": target_profile_ids,
+        "primary_profile_id": picks_payload["profile_id"],
+        "requested_profile_ids": target_profile_ids,
         "run_ids": summary["run_ids"],
         "embedded_count": summary["embedded_count"],
-        "recommendation_counts": recommendation_counts,
+        "generation_runs": generation_runs,
+        "has_failures": has_failures,
         "needs_generation": picks_payload["needs_generation"],
         "picks": picks_payload["picks"],
         "sections": picks_payload["sections"],

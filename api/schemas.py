@@ -65,13 +65,24 @@ class GenerateDailyPicksRequest(BaseModel):
     max_results: int = Field(default=150, ge=1)
     embedding_limit: int = Field(default=600, ge=1)
 
+class GenerationProfileStatus(BaseModel):
+    profile_id: str
+    status: Literal["succeeded", "failed"]
+    recommendation_count: int = Field(ge=0)
+    error_message: str | None = None
+
+class GenerationRunStatus(BaseModel):
+    run_id: str
+    profile_statuses: list[GenerationProfileStatus]
+
 class GenerateDailyPicksResponse(BaseModel):
     user_id: str
-    profile_id: str
-    generated_profile_ids: list[str]
+    primary_profile_id: str
+    requested_profile_ids: list[str]
     run_ids: list[str]
     embedded_count: int
-    recommendation_counts: dict[str, int]
+    generation_runs: list[GenerationRunStatus]
+    has_failures: bool
     needs_generation: bool
     picks: list[PublicPick]
     sections: list[DigestSection]

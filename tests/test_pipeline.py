@@ -53,6 +53,22 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         "run-1": [{"rank": 1}],
         "run-2": [{"rank": 1}],
     }
+    assert summary["recommendation_status_by_run_profile"] == {
+        "run-1": {
+            "profile-1": {
+                "status": "succeeded",
+                "recommendation_count": 1,
+                "error_message": None,
+            }
+        },
+        "run-2": {
+            "profile-1": {
+                "status": "succeeded",
+                "recommendation_count": 1,
+                "error_message": None,
+            }
+        },
+    }
 
 def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     monkeypatch.setattr(pipeline, "setup_database", Mock())
@@ -74,6 +90,22 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     assert summary["recommendations_by_run"] == {
         "run-1": [],
         "run-2": [{"rank": 1}],
+    }
+    assert summary["recommendation_status_by_run_profile"] == {
+        "run-1": {
+            "profile-1": {
+                "status": "failed",
+                "recommendation_count": 0,
+                "error_message": "boom",
+            }
+        },
+        "run-2": {
+            "profile-1": {
+                "status": "succeeded",
+                "recommendation_count": 1,
+                "error_message": None,
+            }
+        },
     }
 
 def test_run_pipeline_generates_for_multiple_profiles(monkeypatch):
@@ -103,4 +135,18 @@ def test_run_pipeline_generates_for_multiple_profiles(monkeypatch):
             {"profile_id": "profile-2", "rank": 1},
             {"profile_id": "profile-2", "rank": 2},
         ]
+    }
+    assert summary["recommendation_status_by_run_profile"] == {
+        "run-1": {
+            "profile-1": {
+                "status": "succeeded",
+                "recommendation_count": 1,
+                "error_message": None,
+            },
+            "profile-2": {
+                "status": "succeeded",
+                "recommendation_count": 2,
+                "error_message": None,
+            },
+        }
     }

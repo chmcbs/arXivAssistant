@@ -7,3 +7,6 @@ class BadRequestError(ValueError):
 
 class NotFoundError(ValueError):
     """Raised when a requested resource is absent."""
+
+class InternalServerError(ValueError):
+    """Raised when an internal pipeline failure should be surfaced as HTTP 500."""

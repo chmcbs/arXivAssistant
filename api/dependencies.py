@@ -35,7 +35,7 @@ from api.services.daily_picks import (
     get_debug_daily_picks_payload as get_debug_daily_picks_payload_service,
     save_feedback_payload as save_feedback_payload_service,
 )
-from api.services.errors import NotFoundError
+from api.services.errors import InternalServerError, NotFoundError
 from api.services.metrics import get_metrics_payload as get_metrics_payload_service
 from api.services.profiles import (
     add_profile_keyword_payload as add_profile_keyword_payload_service,
@@ -47,6 +47,8 @@ from api.services.profiles import (
 )
 
 def _to_http_exception(error: Exception) -> HTTPException:
+    if isinstance(error, InternalServerError):
+        return HTTPException(status_code=500, detail=str(error))
     if isinstance(error, NotFoundError):
         return HTTPException(status_code=404, detail=str(error))
     return HTTPException(status_code=400, detail=str(error))

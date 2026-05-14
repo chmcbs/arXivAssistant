@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from unittest.mock import Mock
 import pytest
+from fastapi import HTTPException
 import api.dependencies as dependencies
 from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
@@ -21,7 +22,7 @@ from api.services.daily_picks import (
     get_debug_daily_picks_payload,
     save_feedback_payload,
 )
-from api.services.errors import BadRequestError
+from api.services.errors import BadRequestError, InternalServerError
 from api.services.metrics import get_metrics_payload
 from api.services.profiles import (
     add_profile_keyword_payload,
@@ -185,6 +186,20 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
             "run_ids": ["run-123"],
             "embedded_count": 5,
             "recommendations_by_run": {"run-123": [{"rank": 1}, {"rank": 2}]},
+            "recommendation_status_by_run_profile": {
+                "run-123": {
+                    "profile-1": {
+                        "status": "succeeded",
+                        "recommendation_count": 1,
+                        "error_message": None,
+                    },
+                    "profile-2": {
+                        "status": "succeeded",
+                        "recommendation_count": 1,
+                        "error_message": None,
+                    },
+                }
+            },
         }
     )
     get_daily_picks = Mock(
@@ -238,13 +253,119 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         profile_id=None,
         run_ids=["run-123"],
     )
-    assert payload["profile_id"] == "profile-1"
-    assert payload["generated_profile_ids"] == ["profile-1", "profile-2"]
+    assert payload["primary_profile_id"] == "profile-1"
+    assert payload["requested_profile_ids"] == ["profile-1", "profile-2"]
     assert payload["run_ids"] == ["run-123"]
     assert payload["embedded_count"] == 5
-    assert payload["recommendation_counts"] == {"run-123": 2}
+    assert payload["has_failures"] is False
+    assert payload["generation_runs"] == [
+        {
+            "run_id": "run-123",
+            "profile_statuses": [
+                {
+                    "profile_id": "profile-1",
+                    "status": "succeeded",
+                    "recommendation_count": 1,
+                    "error_message": None,
+                },
+                {
+                    "profile_id": "profile-2",
+                    "status": "succeeded",
+                    "recommendation_count": 1,
+                    "error_message": None,
+                },
+            ],
+        }
+    ]
     assert payload["picks"] == [{"rank": 1, "arxiv_id": "2601.00001"}]
     assert len(payload["sections"]) == 2
+
+def test_generate_daily_picks_allows_zero_recommendations_when_generation_succeeds():
+    payload = generate_daily_picks_payload(
+        GenerateDailyPicksRequest(
+            user_id="default",
+            max_results=123,
+            embedding_limit=456,
+        ),
+        get_arxiv_categories=Mock(return_value=["cs.AI"]),
+        resolve_profile=Mock(),
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
+        run_pipeline=Mock(
+            return_value={
+                "run_ids": ["run-123"],
+                "embedded_count": 5,
+                "recommendations_by_run": {"run-123": []},
+                "recommendation_status_by_run_profile": {
+                    "run-123": {
+                        "profile-1": {
+                            "status": "succeeded",
+                            "recommendation_count": 0,
+                            "error_message": None,
+                        }
+                    }
+                },
+            }
+        ),
+        get_daily_picks_payload=Mock(
+            return_value={
+                "user_id": "default",
+                "profile_id": "profile-1",
+                "needs_generation": False,
+                "picks": [],
+                "sections": [
+                    {
+                        "profile_id": "profile-1",
+                        "profile_slot": 1,
+                        "category": "cs.AI",
+                        "interest_sentence": "Efficient LLM systems",
+                        "needs_generation": False,
+                        "picks": [],
+                    }
+                ],
+            }
+        ),
+    )
+
+    assert payload["has_failures"] is False
+    assert payload["generation_runs"][0]["profile_statuses"][0]["status"] == "succeeded"
+    assert payload["generation_runs"][0]["profile_statuses"][0]["recommendation_count"] == 0
+    assert payload["picks"] == []
+
+def test_generate_daily_picks_fails_when_all_targets_fail():
+    with pytest.raises(InternalServerError) as error:
+        generate_daily_picks_payload(
+            GenerateDailyPicksRequest(user_id="default"),
+            get_arxiv_categories=Mock(return_value=["cs.AI"]),
+            resolve_profile=Mock(),
+            list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
+            run_pipeline=Mock(
+                return_value={
+                    "run_ids": ["run-123"],
+                    "embedded_count": 5,
+                    "recommendations_by_run": {"run-123": []},
+                    "recommendation_status_by_run_profile": {
+                        "run-123": {
+                            "profile-1": {
+                                "status": "failed",
+                                "recommendation_count": 0,
+                                "error_message": "boom",
+                            }
+                        }
+                    },
+                }
+            ),
+            get_daily_picks_payload=Mock(
+                return_value={
+                    "user_id": "default",
+                    "profile_id": "profile-1",
+                    "needs_generation": False,
+                    "picks": [],
+                    "sections": [],
+                }
+            ),
+        )
+
+    assert "NO_SUCCESSFUL_GENERATION" in str(error.value)
 
 def test_generate_daily_picks_rejects_multiple_categories():
     with pytest.raises(BadRequestError) as error:
@@ -487,3 +608,26 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
         "run_ids": ["run-1", "run-2"],
         "conn": sentinel_conn,
     }
+
+def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(monkeypatch):
+    sentinel_conn = object()
+    sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
+
+    @contextmanager
+    def fake_uow(uow=None, conn=None):
+        assert uow is None
+        assert conn is None
+        yield sentinel_uow
+
+    monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
+    monkeypatch.setattr(
+        dependencies,
+        "generate_daily_picks_payload_service",
+        Mock(side_effect=InternalServerError("NO_SUCCESSFUL_GENERATION: failed")),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        dependencies.generate_daily_picks_payload(GenerateDailyPicksRequest(user_id="default"))
+
+    assert error.value.status_code == 500
+    assert "NO_SUCCESSFUL_GENERATION" in error.value.detail
