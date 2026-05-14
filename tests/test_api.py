@@ -75,6 +75,7 @@ def test_get_daily_picks_returns_public_fields():
             "title": "Paper 1",
             "abstract": "Abstract 1",
             "pdf_url": "https://arxiv.org/pdf/2601.00001",
+            "final_score": 0.9,
         }
     ]
 

@@ -13,6 +13,7 @@ class PublicPick(BaseModel):
     title: str
     abstract: str
     pdf_url: str | None
+    final_score: float
 
 class DebugPick(PublicPick):
     run_id: str
@@ -20,7 +21,6 @@ class DebugPick(PublicPick):
     generated_at: datetime
     base_dense_score: float
     keyword_boost: float
-    final_score: float
     candidate_window: str
     fallback_stage: int
 
