@@ -1,5 +1,6 @@
 plan.md
 .env
-__pycache__
-.pytest_cache
+__pycache__/
+.pytest_cache/
 .cursor/
+.ruff_cache/
