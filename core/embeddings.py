@@ -2,16 +2,20 @@
 Reads papers without embeddings, generates vectors, and stores them in the paper_embeddings table
 """
 
-import psycopg
 from dataclasses import dataclass
-from core.db import get_database_url
+
+import psycopg
 from sentence_transformers import SentenceTransformer
+
+from core.db import get_database_url
+
 
 @dataclass(frozen=True)
 class PaperForEmbedding:
     arxiv_id: str
     title: str
     abstract: str
+
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -42,6 +46,7 @@ DO UPDATE SET
     embedded_at = NOW();
 """
 
+
 def get_papers_missing_embeddings(limit: int) -> list[PaperForEmbedding]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
@@ -57,8 +62,10 @@ def get_papers_missing_embeddings(limit: int) -> list[PaperForEmbedding]:
         for row in rows
     ]
 
+
 def paper_text(paper: PaperForEmbedding) -> str:
     return f"{paper.title}\n\n{paper.abstract}"
+
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     model = SentenceTransformer(MODEL_NAME)
@@ -66,7 +73,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 
     return embeddings.tolist()
 
-def save_embeddings(papers: list[PaperForEmbedding], embeddings: list[list[float]]) -> int:
+
+def save_embeddings(
+    papers: list[PaperForEmbedding], embeddings: list[list[float]]
+) -> int:
     rows = [
         {
             "arxiv_id": paper.arxiv_id,
@@ -82,6 +92,7 @@ def save_embeddings(papers: list[PaperForEmbedding], embeddings: list[list[float
 
     return len(rows)
 
+
 def run_embeddings(limit: int = 600) -> int:
     papers = get_papers_missing_embeddings(limit)
 
@@ -95,6 +106,7 @@ def run_embeddings(limit: int = 600) -> int:
 
     print(f"Saved embeddings for {saved_count} papers")
     return saved_count
+
 
 if __name__ == "__main__":
     run_embeddings()

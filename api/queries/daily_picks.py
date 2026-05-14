@@ -82,6 +82,7 @@ WHERE profile_id = %s
   AND user_id = %s;
 """
 
+
 @dataclass(frozen=True)
 class DailyPickRow:
     rank: int
@@ -98,6 +99,7 @@ class DailyPickRow:
     candidate_window: str
     fallback_stage: int
 
+
 @dataclass(frozen=True)
 class ResolvedProfileRow:
     profile_id: str
@@ -106,6 +108,7 @@ class ResolvedProfileRow:
     category: str
     interest_sentence: str
     created_at: datetime
+
 
 def fetch_latest_picks(
     profile_id: str,
@@ -148,6 +151,7 @@ def fetch_latest_picks(
         )
         for row in rows
     ]
+
 
 def fetch_profile_by_id(
     profile_id: str,

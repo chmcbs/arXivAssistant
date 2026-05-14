@@ -41,6 +41,7 @@ GROUP BY profile_id
 ORDER BY profile_id ASC;
 """
 
+
 @dataclass(frozen=True)
 class LatestRunRow:
     run_id: str
@@ -53,12 +54,14 @@ class LatestRunRow:
     finished_at: datetime | None
     error_message: str | None
 
+
 @dataclass(frozen=True)
 class MetricsRowSet:
     run_status_counts: dict[str, int]
     latest_runs: list[LatestRunRow]
     total_recommendations: int
     recommendations_by_profile: dict[str, int]
+
 
 def fetch_metrics_rows(
     latest_runs_limit: int,
@@ -71,8 +74,7 @@ def fetch_metrics_rows(
             with conn.cursor() as cur:
                 cur.execute(RUN_STATUS_COUNTS_SQL)
                 run_status_counts = {
-                    status: int(count)
-                    for status, count in cur.fetchall()
+                    status: int(count) for status, count in cur.fetchall()
                 }
 
                 cur.execute(LATEST_RUNS_SQL, (latest_runs_limit,))
@@ -96,16 +98,12 @@ def fetch_metrics_rows(
 
                 cur.execute(RECOMMENDATIONS_BY_PROFILE_SQL)
                 recommendations_by_profile = {
-                    profile_id: int(count)
-                    for profile_id, count in cur.fetchall()
+                    profile_id: int(count) for profile_id, count in cur.fetchall()
                 }
     else:
         with conn.cursor() as cur:
             cur.execute(RUN_STATUS_COUNTS_SQL)
-            run_status_counts = {
-                status: int(count)
-                for status, count in cur.fetchall()
-            }
+            run_status_counts = {status: int(count) for status, count in cur.fetchall()}
 
             cur.execute(LATEST_RUNS_SQL, (latest_runs_limit,))
             latest_runs = [
@@ -128,8 +126,7 @@ def fetch_metrics_rows(
 
             cur.execute(RECOMMENDATIONS_BY_PROFILE_SQL)
             recommendations_by_profile = {
-                profile_id: int(count)
-                for profile_id, count in cur.fetchall()
+                profile_id: int(count) for profile_id, count in cur.fetchall()
             }
 
     return MetricsRowSet(

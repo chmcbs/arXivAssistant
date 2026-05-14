@@ -3,6 +3,7 @@ Creates the Postgres schema
 """
 
 import psycopg
+
 from core.db import get_database_url
 from core.keyword_search import PAPER_SEARCH_VECTOR_SQL
 

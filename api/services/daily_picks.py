@@ -3,13 +3,16 @@ Service functions for daily picks and feedback workflows
 """
 
 from typing import Callable
+
 from api.mappers import to_debug_pick, to_public_pick
 from api.services.errors import BadRequestError, InternalServerError
+
 
 def ensure_single_category_mvp(get_arxiv_categories: Callable[[], list[str]]) -> None:
     categories = get_arxiv_categories()
     if len(categories) != 1:
         raise BadRequestError("API MVP supports exactly one configured arXiv category")
+
 
 def get_daily_picks_payload(
     user_id: str,
@@ -24,7 +27,9 @@ def get_daily_picks_payload(
     else:
         target_profile_ids = list_digest_selected_profile_ids(user_id=user_id)
         if not target_profile_ids:
-            raise BadRequestError("at least one profile must be selected for digest generation")
+            raise BadRequestError(
+                "at least one profile must be selected for digest generation"
+            )
 
     sections = []
     has_anchor_runs = bool(anchored_run_ids)
@@ -55,6 +60,7 @@ def get_daily_picks_payload(
         "sections": sections,
     }
 
+
 def get_debug_daily_picks_payload(
     user_id: str,
     profile_id: str | None,
@@ -82,6 +88,7 @@ def get_debug_daily_picks_payload(
 
     return payload
 
+
 def generate_daily_picks_payload(
     request,
     get_arxiv_categories: Callable[[], list[str]],
@@ -93,12 +100,16 @@ def generate_daily_picks_payload(
     ensure_single_category_mvp(get_arxiv_categories)
 
     if request.profile_id is not None:
-        profile = resolve_profile(user_id=request.user_id, profile_id=request.profile_id)
+        profile = resolve_profile(
+            user_id=request.user_id, profile_id=request.profile_id
+        )
         target_profile_ids = [str(profile["profile_id"])]
     else:
         target_profile_ids = list_digest_selected_profile_ids(user_id=request.user_id)
         if not target_profile_ids:
-            raise BadRequestError("at least one profile must be selected for digest generation")
+            raise BadRequestError(
+                "at least one profile must be selected for digest generation"
+            )
 
     summary = run_pipeline(
         user_id=request.user_id,
@@ -113,7 +124,9 @@ def generate_daily_picks_payload(
     )
 
     recommendations_by_run_profile = summary.get("recommendations_by_run_profile", {})
-    recommendation_status_by_run_profile = summary.get("recommendation_status_by_run_profile", {})
+    recommendation_status_by_run_profile = summary.get(
+        "recommendation_status_by_run_profile", {}
+    )
     generation_runs = []
     has_failures = False
     has_successes = False
@@ -124,7 +137,9 @@ def generate_daily_picks_payload(
         for target_profile_id in target_profile_ids:
             status_entry = status_map.get(target_profile_id)
             if status_entry is None:
-                recommendation_count = len(recommendation_map.get(target_profile_id, []))
+                recommendation_count = len(
+                    recommendation_map.get(target_profile_id, [])
+                )
                 status_entry = {
                     "status": "succeeded",
                     "recommendation_count": recommendation_count,
@@ -170,6 +185,7 @@ def generate_daily_picks_payload(
         "picks": picks_payload["picks"],
         "sections": picks_payload["sections"],
     }
+
 
 def save_feedback_payload(
     request,

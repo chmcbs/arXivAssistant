@@ -3,15 +3,17 @@ Runs the end-to-end recommendation pipeline
 """
 
 from core.config import DEFAULT_USER_ID
-from core.schema import main as setup_database
 from core.embeddings import run_embeddings
 from core.ingestion import run_ingestion
 from core.profiles import get_or_create_default_profile
 from core.recommendations import generate_recommendations
+from core.schema import main as setup_database
+
 
 def _stringify_error(error: Exception) -> str:
     text = str(error).strip()
     return text or error.__class__.__name__
+
 
 def run_pipeline(
     user_id: str = DEFAULT_USER_ID,
@@ -57,7 +59,9 @@ def run_pipeline(
                     user_id=user_id,
                     profile_id=target_profile_id,
                 )
-                recommendations_by_run_profile[run_id][target_profile_id] = recommendations
+                recommendations_by_run_profile[run_id][
+                    target_profile_id
+                ] = recommendations
                 recommendation_status_by_run_profile[run_id][target_profile_id] = {
                     "status": "succeeded",
                     "recommendation_count": len(recommendations),
@@ -83,16 +87,22 @@ def run_pipeline(
     if len(target_profile_ids) == 1:
         only_profile_id = target_profile_ids[0]
         for run_id in run_ids:
-            recommendations_by_run[run_id] = recommendations_by_run_profile[run_id][only_profile_id]
+            recommendations_by_run[run_id] = recommendations_by_run_profile[run_id][
+                only_profile_id
+            ]
     else:
         for run_id in run_ids:
             flattened = []
             for target_profile_id in target_profile_ids:
-                for recommendation in recommendations_by_run_profile[run_id][target_profile_id]:
-                    flattened.append({
-                        "profile_id": target_profile_id,
-                        **recommendation,
-                    })
+                for recommendation in recommendations_by_run_profile[run_id][
+                    target_profile_id
+                ]:
+                    flattened.append(
+                        {
+                            "profile_id": target_profile_id,
+                            **recommendation,
+                        }
+                    )
             recommendations_by_run[run_id] = flattened
 
     return {
@@ -102,6 +112,7 @@ def run_pipeline(
         "recommendations_by_run_profile": recommendations_by_run_profile,
         "recommendation_status_by_run_profile": recommendation_status_by_run_profile,
     }
+
 
 if __name__ == "__main__":
     run_pipeline()

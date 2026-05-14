@@ -3,15 +3,20 @@ Tests the ingestion pipeline
 """
 
 from unittest.mock import MagicMock, Mock
+
 import pytest
+
 from core import ingestion
 from core.ingestion import clean_id
+
 
 def test_clean_id_removes_arxiv_version_suffix():
     assert clean_id("2401.12345v2") == "2401.12345"
 
+
 def test_clean_id_leaves_unversioned_id_unchanged():
     assert clean_id("2401.12345") == "2401.12345"
+
 
 def test_run_ingestion_completes_run(monkeypatch):
     papers = [object(), object()]
@@ -31,6 +36,7 @@ def test_run_ingestion_completes_run(monkeypatch):
     ingestion.complete_run.assert_called_once_with("run-123", 2, 2)
     ingestion.fail_run.assert_not_called()
 
+
 def test_run_ingestion_marks_run_failed(monkeypatch):
     error = RuntimeError("arxiv failed")
 
@@ -47,13 +53,18 @@ def test_run_ingestion_marks_run_failed(monkeypatch):
     ingestion.save_papers.assert_not_called()
     ingestion.complete_run.assert_not_called()
 
+
 def test_run_ingestion_continues_after_category_failure(monkeypatch):
     papers = [object(), object()]
 
     monkeypatch.setattr(ingestion, "start_run", Mock(side_effect=["run-1", "run-2"]))
-    monkeypatch.setattr(ingestion, "fetch_papers", Mock(
-        side_effect=[RuntimeError("failed"), papers],
-    ))
+    monkeypatch.setattr(
+        ingestion,
+        "fetch_papers",
+        Mock(
+            side_effect=[RuntimeError("failed"), papers],
+        ),
+    )
     monkeypatch.setattr(ingestion, "save_papers", Mock(return_value=2))
     monkeypatch.setattr(ingestion, "complete_run", Mock())
     monkeypatch.setattr(ingestion, "fail_run", Mock())
@@ -63,6 +74,7 @@ def test_run_ingestion_continues_after_category_failure(monkeypatch):
     assert run_ids == ["run-1", "run-2"]
     ingestion.fail_run.assert_called_once_with("run-1", "failed")
     ingestion.complete_run.assert_called_once_with("run-2", 2, 2)
+
 
 def test_save_papers_maps_arxiv_results_to_database_rows(monkeypatch):
     paper = Mock()

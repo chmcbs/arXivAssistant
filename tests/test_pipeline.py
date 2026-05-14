@@ -3,7 +3,9 @@ Tests the full recommendation pipeline
 """
 
 from unittest.mock import Mock
+
 from core import pipeline
+
 
 def test_run_pipeline_calls_steps_in_order(monkeypatch):
     calls = []
@@ -16,7 +18,10 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "run_ingestion",
-        Mock(side_effect=lambda max_results: calls.append(("run_ingestion", max_results)) or ["run-1", "run-2"]),
+        Mock(
+            side_effect=lambda max_results: calls.append(("run_ingestion", max_results))
+            or ["run-1", "run-2"]
+        ),
     )
     monkeypatch.setattr(
         pipeline,
@@ -29,7 +34,8 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         Mock(
             side_effect=lambda run_id, user_id, profile_id: calls.append(
                 ("generate_recommendations", run_id, user_id, profile_id)
-            ) or [{"rank": 1}]
+            )
+            or [{"rank": 1}]
         ),
     )
 
@@ -70,9 +76,12 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         },
     }
 
+
 def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     monkeypatch.setattr(pipeline, "setup_database", Mock())
-    monkeypatch.setattr(pipeline, "run_ingestion", Mock(return_value=["run-1", "run-2"]))
+    monkeypatch.setattr(
+        pipeline, "run_ingestion", Mock(return_value=["run-1", "run-2"])
+    )
     monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=3))
     monkeypatch.setattr(
         pipeline,
@@ -107,6 +116,7 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
             }
         },
     }
+
 
 def test_run_pipeline_generates_for_multiple_profiles(monkeypatch):
     monkeypatch.setattr(pipeline, "setup_database", Mock())

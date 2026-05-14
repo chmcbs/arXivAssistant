@@ -3,7 +3,9 @@ Service functions for profile endpoints
 """
 
 from typing import Callable
+
 from api.mappers import to_profile_summary
+
 
 def create_profile_payload(
     request,
@@ -22,9 +24,8 @@ def create_profile_payload(
         profile_id=profile_id,
     )
 
-    return {
-        "profile": list_profiles_payload(request.user_id)["profiles"][-1]
-    }
+    return {"profile": list_profiles_payload(request.user_id)["profiles"][-1]}
+
 
 def list_profiles_payload(
     user_id: str,
@@ -36,7 +37,10 @@ def list_profiles_payload(
         "profiles": [to_profile_summary(row) for row in profile_rows],
     }
 
-def update_digest_selection_payload(request, set_digest_profile_selection: Callable[..., list[str]]) -> dict:
+
+def update_digest_selection_payload(
+    request, set_digest_profile_selection: Callable[..., list[str]]
+) -> dict:
     selected_profile_ids = set_digest_profile_selection(
         profile_ids=request.profile_ids,
         user_id=request.user_id,
@@ -45,6 +49,7 @@ def update_digest_selection_payload(request, set_digest_profile_selection: Calla
         "user_id": request.user_id,
         "selected_profile_ids": selected_profile_ids,
     }
+
 
 def add_profile_keyword_payload(
     profile_id: str,
@@ -62,6 +67,7 @@ def add_profile_keyword_payload(
         "keywords": keywords,
     }
 
+
 def remove_profile_keyword_payload(
     profile_id: str,
     request,
@@ -77,6 +83,7 @@ def remove_profile_keyword_payload(
         "profile_id": profile_id,
         "keywords": keywords,
     }
+
 
 def list_profile_keywords_payload(
     profile_id: str,

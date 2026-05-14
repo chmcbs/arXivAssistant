@@ -3,8 +3,11 @@ Route-level tests for FastAPI HTTP contracts
 """
 
 from unittest.mock import Mock
+
 from starlette.testclient import TestClient
+
 import api.routes as routes
+
 
 def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypatch):
     monkeypatch.setattr(
@@ -76,6 +79,7 @@ def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypat
     assert payload["primary_profile_id"] == "profile-1"
     assert payload["has_failures"] is False
     assert payload["generation_runs"][0]["profile_statuses"][0]["status"] == "succeeded"
+
 
 def test_daily_picks_generate_route_returns_500_for_internal_failure(monkeypatch):
     monkeypatch.setattr(

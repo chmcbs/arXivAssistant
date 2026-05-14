@@ -3,12 +3,15 @@ Generates top-K recommendations per (run_id, profile_id)
 """
 
 import uuid
-import psycopg
 from dataclasses import dataclass
+
+import psycopg
+
 from core.config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
 from core.db import get_database_url
 from core.keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
 from core.profiles import resolve_profile_id
+
 
 @dataclass(frozen=True)
 class RankedCandidateRow:
@@ -21,6 +24,7 @@ class RankedCandidateRow:
     base_dense_score: float
     keyword_boost: float
     final_score: float
+
 
 FETCH_RUN_SQL = """
 SELECT run_id, category, max_results
@@ -300,6 +304,7 @@ VALUES (
 );
 """
 
+
 # Resolve the number of items to return (override > user preference > default)
 def _get_effective_k(cur, profile_id: str, k_override: int | None) -> int:
     if k_override is not None:
@@ -315,12 +320,14 @@ def _get_effective_k(cur, profile_id: str, k_override: int | None) -> int:
 
     return int(row[0])
 
+
 def _ensure_completed_run(cur, run_id: str) -> tuple[str, str, int]:
     cur.execute(FETCH_RUN_SQL, (run_id,))
     row = cur.fetchone()
     if row is None:
         raise ValueError(f"Run {run_id} must exist and be completed")
     return str(row[0]), str(row[1]), int(row[2])
+
 
 # Rank papers for a completed run and persist as recommendations
 def generate_recommendations(
@@ -402,11 +409,14 @@ def generate_recommendations(
         for c in candidates
     ]
 
+
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        raise SystemExit("Usage: python recommendations.py <run_id> [user_id] [profile_id]")
+        raise SystemExit(
+            "Usage: python recommendations.py <run_id> [user_id] [profile_id]"
+        )
 
     cli_run_id = sys.argv[1]
     cli_user_id = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_USER_ID

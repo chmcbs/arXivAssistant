@@ -3,6 +3,7 @@ Default application settings
 """
 
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +15,7 @@ DEFAULT_INTEREST_TEXT = os.getenv(
     "I'm interested in learning about artificial intelligence research.",
 )
 
+
 # Ingestion
 def get_arxiv_categories() -> list[str]:
     raw = os.getenv("ARXIV_CATEGORIES", "cs.AI")
@@ -24,12 +26,14 @@ def get_arxiv_categories() -> list[str]:
 
     return categories
 
+
 # Recommendation
 def get_daily_picks_k() -> int:
     if DEFAULT_DAILY_K < 1:
         raise ValueError("DAILY_PICKS_K must be >= 1")
 
     return DEFAULT_DAILY_K
+
 
 # Ranking
 def get_keyword_boost_cap() -> float:

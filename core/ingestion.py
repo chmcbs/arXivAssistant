@@ -3,11 +3,13 @@ Fetches papers from arXiv and stores them idempotently
 """
 
 import re
+import uuid
+
 import arxiv
 import psycopg
-import uuid
-from core.db import get_database_url
+
 from core.config import get_arxiv_categories
+from core.db import get_database_url
 
 UPSERT_PAPER_SQL = """
 INSERT INTO papers (
@@ -66,12 +68,13 @@ SET status = 'failed',
 WHERE run_id = %s;
 """
 
+
 def fetch_papers(
-    category: str = 'cs.AI',
+    category: str = "cs.AI",
     max_results: int = 150,
     sort_by: arxiv.SortCriterion = arxiv.SortCriterion.SubmittedDate,
     sort_order: arxiv.SortOrder = arxiv.SortOrder.Descending,
-    ):
+):
     client = arxiv.Client()
     search = arxiv.Search(
         query=f"cat:{category}",
@@ -82,11 +85,13 @@ def fetch_papers(
 
     return list(client.results(search))
 
+
 def clean_id(arxiv_id: str) -> str:
     """
     Convert IDs so different versions update to the same paper row
     """
     return re.sub(r"v\d+$", "", arxiv_id)
+
 
 def save_papers(papers: list[arxiv.Result]) -> int:
     """
@@ -111,6 +116,7 @@ def save_papers(papers: list[arxiv.Result]) -> int:
             cur.executemany(UPSERT_PAPER_SQL, rows)
     return len(rows)
 
+
 def start_run(category: str, max_results: int) -> str:
     run_id = str(uuid.uuid4())
 
@@ -120,17 +126,22 @@ def start_run(category: str, max_results: int) -> str:
 
     return run_id
 
+
 def complete_run(run_id: str, fetched_count: int, saved_count: int) -> None:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(COMPLETE_RUN_SQL, (fetched_count, saved_count, run_id))
+
 
 def fail_run(run_id: str, error_message: str) -> None:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(FAIL_RUN_SQL, (error_message, run_id))
 
-def run_ingestion(categories: list[str] | None = None, max_results: int = 150) -> list[str]:
+
+def run_ingestion(
+    categories: list[str] | None = None, max_results: int = 150
+) -> list[str]:
     if categories is None:
         categories = get_arxiv_categories()
 
@@ -151,6 +162,7 @@ def run_ingestion(categories: list[str] | None = None, max_results: int = 150) -
         run_ids.append(run_id)
 
     return run_ids
+
 
 if __name__ == "__main__":
     run_ingestion()

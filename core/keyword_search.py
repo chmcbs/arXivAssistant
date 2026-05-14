@@ -5,6 +5,7 @@ Keyword search helpers
 SEARCH_DICTIONARY = "simple"
 MAX_KEYWORDS_PER_PROFILE = 10
 
+
 def paper_search_vector_sql(alias: str | None = None) -> str:
     prefix = f"{alias}." if alias else ""
     return (
@@ -12,7 +13,9 @@ def paper_search_vector_sql(alias: str | None = None) -> str:
         f"setweight(to_tsvector('{SEARCH_DICTIONARY}', coalesce({prefix}abstract, '')), 'B')"
     )
 
+
 PAPER_SEARCH_VECTOR_SQL = paper_search_vector_sql()
+
 
 def normalize_keyword(value: str) -> str:
     keyword = value.strip().lower()

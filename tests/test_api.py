@@ -2,11 +2,13 @@
 Tests FastAPI service helpers
 """
 
-from datetime import datetime, timezone
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from unittest.mock import Mock
+
 import pytest
 from fastapi import HTTPException
+
 import api.dependencies as dependencies
 from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
@@ -30,6 +32,7 @@ from api.services.profiles import (
     update_digest_selection_payload,
 )
 
+
 def _pick_row(rank=1):
     return DailyPickRow(
         rank=rank,
@@ -46,6 +49,7 @@ def _pick_row(rank=1):
         candidate_window="run",
         fallback_stage=0,
     )
+
 
 def test_get_daily_picks_returns_empty_state():
     payload = get_daily_picks_payload(
@@ -80,6 +84,7 @@ def test_get_daily_picks_returns_empty_state():
         ],
     }
 
+
 def test_get_daily_picks_returns_public_fields():
     payload = get_daily_picks_payload(
         user_id="default",
@@ -110,6 +115,7 @@ def test_get_daily_picks_returns_public_fields():
     assert payload["sections"][0]["profile_id"] == "profile-1"
     assert payload["sections"][0]["category"] == "cs.AI"
 
+
 def test_get_daily_picks_returns_multi_profile_sections():
     resolve_profile = Mock(
         side_effect=[
@@ -139,9 +145,13 @@ def test_get_daily_picks_returns_multi_profile_sections():
     assert payload["profile_id"] == "profile-1"
     assert payload["needs_generation"] is True
     assert payload["picks"][0]["arxiv_id"] == "2601.00001"
-    assert [section["profile_id"] for section in payload["sections"]] == ["profile-1", "profile-2"]
+    assert [section["profile_id"] for section in payload["sections"]] == [
+        "profile-1",
+        "profile-2",
+    ]
     assert payload["sections"][1]["needs_generation"] is True
     assert payload["sections"][1]["picks"] == []
+
 
 def test_get_daily_picks_anchored_run_ids_treat_empty_as_generated():
     payload = get_daily_picks_payload(
@@ -164,6 +174,7 @@ def test_get_daily_picks_anchored_run_ids_treat_empty_as_generated():
     assert payload["sections"][0]["needs_generation"] is False
     assert payload["sections"][0]["picks"] == []
 
+
 def test_get_debug_daily_picks_includes_ranking_metadata():
     payload = get_debug_daily_picks_payload(
         user_id="default",
@@ -179,6 +190,7 @@ def test_get_debug_daily_picks_includes_ranking_metadata():
     assert payload["picks"][0]["keyword_boost"] == 0.15
     assert payload["picks"][0]["candidate_window"] == "run"
     assert payload["picks"][0]["fallback_stage"] == 0
+
 
 def test_generate_daily_picks_runs_pipeline_and_returns_picks():
     run_pipeline = Mock(
@@ -280,6 +292,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
     assert payload["picks"] == [{"rank": 1, "arxiv_id": "2601.00001"}]
     assert len(payload["sections"]) == 2
 
+
 def test_generate_daily_picks_allows_zero_recommendations_when_generation_succeeds():
     payload = generate_daily_picks_payload(
         GenerateDailyPicksRequest(
@@ -328,8 +341,12 @@ def test_generate_daily_picks_allows_zero_recommendations_when_generation_succee
 
     assert payload["has_failures"] is False
     assert payload["generation_runs"][0]["profile_statuses"][0]["status"] == "succeeded"
-    assert payload["generation_runs"][0]["profile_statuses"][0]["recommendation_count"] == 0
+    assert (
+        payload["generation_runs"][0]["profile_statuses"][0]["recommendation_count"]
+        == 0
+    )
     assert payload["picks"] == []
+
 
 def test_generate_daily_picks_fails_when_all_targets_fail():
     with pytest.raises(InternalServerError) as error:
@@ -367,6 +384,7 @@ def test_generate_daily_picks_fails_when_all_targets_fail():
 
     assert "NO_SUCCESSFUL_GENERATION" in str(error.value)
 
+
 def test_generate_daily_picks_rejects_multiple_categories():
     with pytest.raises(BadRequestError) as error:
         generate_daily_picks_payload(
@@ -380,6 +398,7 @@ def test_generate_daily_picks_rejects_multiple_categories():
 
     assert "API MVP" in str(error.value)
 
+
 def test_generate_daily_picks_rejects_when_no_digest_profiles_selected():
     with pytest.raises(BadRequestError) as error:
         generate_daily_picks_payload(
@@ -392,6 +411,7 @@ def test_generate_daily_picks_rejects_when_no_digest_profiles_selected():
         )
 
     assert "at least one profile" in str(error.value)
+
 
 def test_save_feedback_payload_updates_preferences():
     save_feedback = Mock(return_value="feedback-123")
@@ -426,6 +446,7 @@ def test_save_feedback_payload_updates_preferences():
         "preference_updated": True,
     }
 
+
 def test_add_profile_keyword_payload_maps_response():
     add_profile_keyword = Mock(return_value=["encoder transformers", "kv cache"])
     payload = add_profile_keyword_payload(
@@ -447,6 +468,7 @@ def test_add_profile_keyword_payload_maps_response():
         "profile_id": "profile-1",
         "keywords": ["encoder transformers", "kv cache"],
     }
+
 
 def test_remove_profile_keyword_payload_maps_response():
     remove_profile_keyword = Mock(return_value=["encoder transformers"])
@@ -470,6 +492,7 @@ def test_remove_profile_keyword_payload_maps_response():
         "keywords": ["encoder transformers"],
     }
 
+
 def test_update_digest_selection_payload_maps_response():
     set_digest_profile_selection = Mock(return_value=["profile-2", "profile-3"])
     payload = update_digest_selection_payload(
@@ -488,6 +511,7 @@ def test_update_digest_selection_payload_maps_response():
         "user_id": "default",
         "selected_profile_ids": ["profile-2", "profile-3"],
     }
+
 
 def test_get_metrics_payload_returns_run_and_recommendation_counts():
     metrics_rows = MetricsRowSet(
@@ -518,6 +542,7 @@ def test_get_metrics_payload_returns_run_and_recommendation_counts():
     assert payload["total_recommendations"] == 3
     assert payload["recommendations_by_profile"] == {"profile-1": 3}
 
+
 def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     sentinel_conn = object()
     sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
@@ -540,7 +565,8 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     monkeypatch.setattr(
         dependencies,
         "_resolve_profile",
-        lambda user_id, profile_id, conn=None: seen.setdefault("resolve_conn", conn) or {},
+        lambda user_id, profile_id, conn=None: seen.setdefault("resolve_conn", conn)
+        or {},
     )
     monkeypatch.setattr(
         dependencies,
@@ -550,15 +576,19 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     monkeypatch.setattr(
         dependencies,
         "_fetch_latest_picks",
-        lambda profile_id, run_ids=None, conn=None: seen.setdefault("picks_conn", conn) or [],
+        lambda profile_id, run_ids=None, conn=None: seen.setdefault("picks_conn", conn)
+        or [],
     )
 
-    payload = dependencies.get_daily_picks_payload(user_id="default", profile_id="profile-1")
+    payload = dependencies.get_daily_picks_payload(
+        user_id="default", profile_id="profile-1"
+    )
 
     assert payload == {"ok": True}
     assert seen["resolve_conn"] is sentinel_conn
     assert seen["list_conn"] is sentinel_conn
     assert seen["picks_conn"] is sentinel_conn
+
 
 def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch):
     sentinel_conn = object()
@@ -593,7 +623,8 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
         lambda profile_id, run_ids=None, conn=None: seen.setdefault(
             "call",
             {"profile_id": profile_id, "run_ids": run_ids, "conn": conn},
-        ) or [],
+        )
+        or [],
     )
 
     payload = dependencies.get_daily_picks_payload(
@@ -609,7 +640,10 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
         "conn": sentinel_conn,
     }
 
-def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(monkeypatch):
+
+def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(
+    monkeypatch,
+):
     sentinel_conn = object()
     sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
 
@@ -627,7 +661,9 @@ def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(mo
     )
 
     with pytest.raises(HTTPException) as error:
-        dependencies.generate_daily_picks_payload(GenerateDailyPicksRequest(user_id="default"))
+        dependencies.generate_daily_picks_payload(
+            GenerateDailyPicksRequest(user_id="default")
+        )
 
     assert error.value.status_code == 500
     assert "NO_SUCCESSFUL_GENERATION" in error.value.detail

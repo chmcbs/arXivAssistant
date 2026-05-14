@@ -5,8 +5,11 @@ Request-scoped unit-of-work object for API interactions
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
+
 import psycopg
+
 from core.db import get_database_url
+
 
 @dataclass
 class ApiUnitOfWork:
@@ -15,6 +18,7 @@ class ApiUnitOfWork:
 
     def set_generated_run_ids(self, run_ids: list[str]) -> None:
         self.generated_run_ids = list(dict.fromkeys(run_ids))
+
 
 @contextmanager
 def open_api_unit_of_work(

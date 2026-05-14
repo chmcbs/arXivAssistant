@@ -3,7 +3,9 @@ Service helpers for metrics endpoint
 """
 
 from typing import Callable
+
 from api.mappers import to_metrics_payload
+
 
 def get_metrics_payload(
     latest_runs_limit: int,

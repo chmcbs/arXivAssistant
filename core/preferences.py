@@ -2,21 +2,25 @@
 Preference embedding and feedback handling
 """
 
-import psycopg
-from dataclasses import dataclass
-from contextlib import contextmanager
-from core.embeddings import embed_texts
 import uuid
+from contextlib import contextmanager
+from dataclasses import dataclass
+
+import psycopg
+
 from core.config import DEFAULT_USER_ID
 from core.db import get_database_url
+from core.embeddings import embed_texts
 from core.profiles import resolve_profile_id
 from core.vector_helper import vector_literal
+
 
 @dataclass(frozen=True)
 class PreferenceFeedbackRow:
     initial_interest_embedding: object
     embedding: object
     label: str | None
+
 
 UPSERT_PREFERENCE_EMBEDDING_SQL = """
 INSERT INTO profile_preferences (
@@ -69,6 +73,7 @@ SET preference_embedding = %s::vector,
 WHERE profile_id = %s;
 """
 
+
 @contextmanager
 def _connection_scope(conn=None):
     if conn is not None:
@@ -77,6 +82,7 @@ def _connection_scope(conn=None):
 
     with psycopg.connect(get_database_url()) as owned_conn:
         yield owned_conn
+
 
 # Convert pgvector strings to lists
 def coerce_vector(raw_vector) -> list[float]:
@@ -92,6 +98,7 @@ def coerce_vector(raw_vector) -> list[float]:
 
     return [float(value) for value in raw_vector]
 
+
 # Cold start preference embedding
 def initialize_preference_embedding(
     interest_text: str,
@@ -99,7 +106,9 @@ def initialize_preference_embedding(
     profile_id: str | None = None,
     conn=None,
 ) -> str:
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
+    resolved_profile_id = resolve_profile_id(
+        user_id=user_id, profile_id=profile_id, conn=conn
+    )
     preference_vector = vector_literal(embed_texts([interest_text])[0])
 
     with _connection_scope(conn) as active_conn:
@@ -115,6 +124,7 @@ def initialize_preference_embedding(
 
     return resolved_profile_id
 
+
 def save_feedback(
     arxiv_id: str,
     label: str,
@@ -125,15 +135,20 @@ def save_feedback(
     if label not in {"like", "dislike"}:
         raise ValueError("label must be 'like' or 'dislike'")
 
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
+    resolved_profile_id = resolve_profile_id(
+        user_id=user_id, profile_id=profile_id, conn=conn
+    )
     feedback_id = str(uuid.uuid4())
 
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
-            cur.execute(UPSERT_FEEDBACK_SQL, (feedback_id, resolved_profile_id, arxiv_id, label))
+            cur.execute(
+                UPSERT_FEEDBACK_SQL, (feedback_id, resolved_profile_id, arxiv_id, label)
+            )
             row = cur.fetchone()
 
     return str(row[0])
+
 
 def mean_vector(vectors: list[list[float]]) -> list[float]:
     if not vectors:
@@ -146,6 +161,7 @@ def mean_vector(vectors: list[list[float]]) -> list[float]:
         for index in range(dimension)
     ]
 
+
 # Mix feedback with the initial preference embedding
 def blend_vectors(
     initial_vector: list[float],
@@ -157,9 +173,11 @@ def blend_vectors(
         for initial_value, feedback_value in zip(initial_vector, feedback_vector)
     ]
 
+
 # Decay initial weight
 def feedback_alpha(num_feedbacks: int) -> float:
     return 1 / (1 + num_feedbacks)
+
 
 # Normalise preference embedding so cosine distance compares direction rather than magnitude during ranking
 def normalize_vector(vector: list[float]) -> list[float]:
@@ -169,6 +187,7 @@ def normalize_vector(vector: list[float]) -> list[float]:
         return vector
 
     return [value / magnitude for value in vector]
+
 
 # Summarise overall feedback as a single vector
 def compute_preference_vector(
@@ -191,12 +210,15 @@ def compute_preference_vector(
         for liked_value, disliked_value in zip(liked_mean, disliked_mean)
     ]
 
+
 def update_preference_embedding(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
     conn=None,
 ) -> None:
-    resolved_profile_id = resolve_profile_id(user_id=user_id, profile_id=profile_id, conn=conn)
+    resolved_profile_id = resolve_profile_id(
+        user_id=user_id, profile_id=profile_id, conn=conn
+    )
 
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
@@ -204,7 +226,9 @@ def update_preference_embedding(
             raw_rows = cur.fetchall()
 
     if not raw_rows:
-        raise ValueError(f"No preference profile found for profile_id={resolved_profile_id}")
+        raise ValueError(
+            f"No preference profile found for profile_id={resolved_profile_id}"
+        )
 
     feedback_rows = [
         PreferenceFeedbackRow(
@@ -249,4 +273,7 @@ def update_preference_embedding(
 
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
-            cur.execute(UPDATE_PREFERENCE_EMBEDDING_SQL, (preference_vector_literal, resolved_profile_id))
+            cur.execute(
+                UPDATE_PREFERENCE_EMBEDDING_SQL,
+                (preference_vector_literal, resolved_profile_id),
+            )

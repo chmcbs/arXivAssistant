@@ -3,8 +3,10 @@ Shared helpers used by multiple API services
 """
 
 from typing import Callable
+
 from api.queries.daily_picks import ResolvedProfileRow
 from api.services.errors import NotFoundError
+
 
 def resolve_profile(
     user_id: str,

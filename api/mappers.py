@@ -6,6 +6,7 @@ from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
 from api.queries.profiles import ProfileSummaryRow
 
+
 def to_public_pick(row: DailyPickRow) -> dict:
     return {
         "rank": row.rank,
@@ -15,6 +16,7 @@ def to_public_pick(row: DailyPickRow) -> dict:
         "pdf_url": row.pdf_url,
         "final_score": row.final_score,
     }
+
 
 def to_debug_pick(row: DailyPickRow) -> dict:
     return {
@@ -29,6 +31,7 @@ def to_debug_pick(row: DailyPickRow) -> dict:
         "fallback_stage": row.fallback_stage,
     }
 
+
 def to_profile_summary(row: ProfileSummaryRow) -> dict:
     return {
         "profile_id": row.profile_id,
@@ -41,6 +44,7 @@ def to_profile_summary(row: ProfileSummaryRow) -> dict:
         "preference_updated_at": row.preference_updated_at,
         "keywords": row.keywords,
     }
+
 
 def to_metrics_payload(metrics_rows: MetricsRowSet) -> dict:
     return {

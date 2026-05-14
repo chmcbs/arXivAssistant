@@ -3,12 +3,15 @@ User profile model and helpers
 """
 
 import uuid
-import psycopg
-from dataclasses import dataclass
 from contextlib import contextmanager
+from dataclasses import dataclass
+
+import psycopg
+
 from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 from core.db import get_database_url
 from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
+
 
 @dataclass(frozen=True)
 class ProfileRow:
@@ -19,6 +22,7 @@ class ProfileRow:
     interest_sentence: str
     created_at: object
     digest_enabled: bool
+
 
 MAX_PROFILES_PER_USER = 3
 
@@ -129,6 +133,7 @@ WHERE user_id = %s
   AND profile_id = ANY(%s::uuid[]);
 """
 
+
 @contextmanager
 def _connection_scope(conn=None):
     if conn is not None:
@@ -138,11 +143,13 @@ def _connection_scope(conn=None):
     with psycopg.connect(get_database_url()) as owned_conn:
         yield owned_conn
 
+
 def _validate_interest_sentence(interest_sentence: str) -> str:
     value = interest_sentence.strip()
     if not value:
         raise ValueError("interest_sentence must not be empty")
     return value
+
 
 def _validate_category(category: str) -> str:
     value = category.strip()
@@ -156,11 +163,13 @@ def _validate_category(category: str) -> str:
         )
     return value
 
+
 def _pick_next_available_slot(occupied_slots: set[int]) -> int:
     for slot in range(1, MAX_PROFILES_PER_USER + 1):
         if slot not in occupied_slots:
             return slot
     raise ValueError(f"user has reached the {MAX_PROFILES_PER_USER}-profile cap")
+
 
 def create_profile(
     user_id: str = DEFAULT_USER_ID,
@@ -169,9 +178,7 @@ def create_profile(
     conn=None,
 ) -> str:
     validated_interest = _validate_interest_sentence(interest_sentence)
-    validated_category = _validate_category(
-        category or get_arxiv_categories()[0]
-    )
+    validated_category = _validate_category(category or get_arxiv_categories()[0])
     profile_id = str(uuid.uuid4())
 
     with _connection_scope(conn) as active_conn:
@@ -194,6 +201,7 @@ def create_profile(
 
     return profile_id
 
+
 def list_profiles(user_id: str = DEFAULT_USER_ID, conn=None) -> list[ProfileRow]:
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
@@ -213,6 +221,7 @@ def list_profiles(user_id: str = DEFAULT_USER_ID, conn=None) -> list[ProfileRow]
         for row in rows
     ]
 
+
 def get_profile(profile_id: str, conn=None) -> ProfileRow | None:
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
@@ -231,6 +240,7 @@ def get_profile(profile_id: str, conn=None) -> ProfileRow | None:
         created_at=row[5],
         digest_enabled=bool(row[6]),
     )
+
 
 def get_or_create_default_profile(
     user_id: str = DEFAULT_USER_ID,
@@ -264,6 +274,7 @@ def get_or_create_default_profile(
         raise ValueError("failed to create default profile")
     return profile
 
+
 def resolve_profile_id(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
@@ -274,6 +285,7 @@ def resolve_profile_id(
 
     profile = get_or_create_default_profile(user_id=user_id, conn=conn)
     return str(profile.profile_id)
+
 
 def list_profile_keywords(
     profile_id: str,
@@ -290,6 +302,7 @@ def list_profile_keywords(
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
+
 
 def add_profile_keyword(
     profile_id: str,
@@ -320,6 +333,7 @@ def add_profile_keyword(
 
     return [row[0] for row in rows]
 
+
 def remove_profile_keyword(
     profile_id: str,
     keyword: str,
@@ -341,13 +355,17 @@ def remove_profile_keyword(
 
     return [row[0] for row in rows]
 
-def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID, conn=None) -> list[str]:
+
+def list_digest_selected_profile_ids(
+    user_id: str = DEFAULT_USER_ID, conn=None
+) -> list[str]:
     with _connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
             cur.execute(LIST_DIGEST_SELECTED_SQL, (user_id,))
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
+
 
 def set_digest_profile_selection(
     profile_ids: list[str],

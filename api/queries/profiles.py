@@ -31,6 +31,7 @@ WHERE p.user_id = %s
 ORDER BY p.profile_slot ASC;
 """
 
+
 @dataclass(frozen=True)
 class ProfileSummaryRow:
     profile_id: str
@@ -42,6 +43,7 @@ class ProfileSummaryRow:
     created_at: datetime
     preference_updated_at: datetime | None
     keywords: list[str]
+
 
 def fetch_profiles_for_user(
     user_id: str,
