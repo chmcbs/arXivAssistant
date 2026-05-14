@@ -151,6 +151,20 @@ def validate() -> str:
     </section>
 
     <section class="card">
+      <h2>Profile Keywords</h2>
+      <label for="keyword-user-id">user_id</label>
+      <input id="keyword-user-id" value="default">
+      <label for="keyword-profile-id">profile_id</label>
+      <input id="keyword-profile-id" placeholder="profile-1">
+      <label for="keyword-value">keyword</label>
+      <input id="keyword-value" placeholder="transformers">
+      <button id="keywords-list-btn">List Keywords</button>
+      <button id="keywords-add-btn">Add Keyword</button>
+      <button id="keywords-remove-btn">Remove Keyword</button>
+      <pre id="keywords-out">Manage profile keywords via GET/POST/DELETE keyword endpoints.</pre>
+    </section>
+
+    <section class="card">
       <h2>POST /daily-picks/generate</h2>
       <label for="generate-user-id">user_id</label>
       <input id="generate-user-id" value="default">
@@ -283,6 +297,54 @@ def validate() -> str:
           user_id: userId,
           profile_ids: profileIds
         });
+      });
+    });
+
+    function getKeywordInputs() {
+      var userId = document.getElementById("keyword-user-id").value.trim() || "default";
+      var profileId = document.getElementById("keyword-profile-id").value.trim();
+      var keyword = document.getElementById("keyword-value").value.trim();
+      if (!profileId) {
+        throw { status: 400, payload: { detail: "profile_id is required" } };
+      }
+      return { userId: userId, profileId: profileId, keyword: keyword };
+    }
+
+    document.getElementById("keywords-list-btn").addEventListener("click", function () {
+      run("keywords-out", async function () {
+        var inputs = getKeywordInputs();
+        return request(
+          "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords?user_id=" + encodeURIComponent(inputs.userId),
+          "GET"
+        );
+      });
+    });
+
+    document.getElementById("keywords-add-btn").addEventListener("click", function () {
+      run("keywords-out", async function () {
+        var inputs = getKeywordInputs();
+        if (!inputs.keyword) {
+          throw { status: 400, payload: { detail: "keyword is required for add" } };
+        }
+        return request(
+          "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords",
+          "POST",
+          { user_id: inputs.userId, keyword: inputs.keyword }
+        );
+      });
+    });
+
+    document.getElementById("keywords-remove-btn").addEventListener("click", function () {
+      run("keywords-out", async function () {
+        var inputs = getKeywordInputs();
+        if (!inputs.keyword) {
+          throw { status: 400, payload: { detail: "keyword is required for remove" } };
+        }
+        return request(
+          "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords",
+          "DELETE",
+          { user_id: inputs.userId, keyword: inputs.keyword }
+        );
       });
     });
 

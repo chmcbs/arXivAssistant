@@ -112,3 +112,4 @@ def test_validate_route_returns_internal_validation_ui():
     assert "text/html" in response.headers["content-type"]
     assert "Validation UI" in response.text
     assert "POST /daily-picks/generate" in response.text
+    assert "Profile Keywords" in response.text
