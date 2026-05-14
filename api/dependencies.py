@@ -188,6 +188,10 @@ def generate_daily_picks_payload(
         with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
 
             def run_pipeline_with_uow(**kwargs):
+                # End any request-scoped transaction before running pipeline setup.
+                # Pipeline opens separate DB connections and may execute DDL that
+                # otherwise blocks on locks held by this connection.
+                active_uow.conn.commit()
                 summary = _run_pipeline(**kwargs)
                 active_uow.set_generated_run_ids(summary.get("run_ids", []))
                 return summary
