@@ -61,7 +61,7 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "get_or_create_default_profile",
-        Mock(return_value={"profile_id": "profile-1"}),
+        Mock(return_value=Mock(profile_id="profile-1")),
     )
     monkeypatch.setattr(
         pipeline,

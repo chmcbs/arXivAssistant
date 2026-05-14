@@ -3,6 +3,7 @@ Helpers to wire dependencies into services
 """
 
 import psycopg
+from dataclasses import asdict
 from fastapi import HTTPException
 from core.config import DEFAULT_USER_ID, get_arxiv_categories
 from core.db import get_database_url
@@ -58,12 +59,13 @@ def _fetch_profile_by_id(profile_id: str, user_id: str):
     )
 
 def _resolve_profile(user_id: str, profile_id: str | None) -> dict:
-    return resolve_profile(
+    profile = resolve_profile(
         user_id=user_id,
         profile_id=profile_id,
         fetch_profile_by_id=_fetch_profile_by_id,
         get_or_create_default_profile=get_or_create_default_profile,
     )
+    return profile if isinstance(profile, dict) else asdict(profile)
 
 def _fetch_latest_picks(profile_id: str):
     return fetch_latest_picks(

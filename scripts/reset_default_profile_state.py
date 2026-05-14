@@ -24,7 +24,7 @@ def reset_default_profile_state(
         user_id=user_id,
         interest_sentence=interest_text,
     )
-    profile_id = str(profile["profile_id"])
+    profile_id = str(profile.profile_id)
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:

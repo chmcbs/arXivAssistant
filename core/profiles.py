@@ -4,9 +4,20 @@ User profile model and helpers
 
 import uuid
 import psycopg
+from dataclasses import dataclass
 from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
 from core.db import get_database_url
 from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
+
+@dataclass(frozen=True)
+class ProfileRow:
+    profile_id: str
+    user_id: str
+    profile_slot: int
+    category: str
+    interest_sentence: str
+    created_at: object
+    digest_enabled: bool
 
 MAX_PROFILES_PER_USER = 3
 
@@ -172,26 +183,26 @@ def create_profile(
 
     return profile_id
 
-def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
+def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[ProfileRow]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(LIST_PROFILES_SQL, (user_id,))
             rows = cur.fetchall()
 
     return [
-        {
-            "profile_id": row[0],
-            "user_id": row[1],
-            "profile_slot": int(row[2]),
-            "category": row[3],
-            "interest_sentence": row[4],
-            "created_at": row[5],
-            "digest_enabled": bool(row[6]),
-        }
+        ProfileRow(
+            profile_id=row[0],
+            user_id=row[1],
+            profile_slot=int(row[2]),
+            category=row[3],
+            interest_sentence=row[4],
+            created_at=row[5],
+            digest_enabled=bool(row[6]),
+        )
         for row in rows
     ]
 
-def get_profile(profile_id: str) -> dict | None:
+def get_profile(profile_id: str) -> ProfileRow | None:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(GET_PROFILE_SQL, (profile_id,))
@@ -200,21 +211,21 @@ def get_profile(profile_id: str) -> dict | None:
     if row is None:
         return None
 
-    return {
-        "profile_id": row[0],
-        "user_id": row[1],
-        "profile_slot": int(row[2]),
-        "category": row[3],
-        "interest_sentence": row[4],
-        "created_at": row[5],
-        "digest_enabled": bool(row[6]),
-    }
+    return ProfileRow(
+        profile_id=row[0],
+        user_id=row[1],
+        profile_slot=int(row[2]),
+        category=row[3],
+        interest_sentence=row[4],
+        created_at=row[5],
+        digest_enabled=bool(row[6]),
+    )
 
 def get_or_create_default_profile(
     user_id: str = DEFAULT_USER_ID,
     category: str | None = None,
     interest_sentence: str = DEFAULT_INTEREST_TEXT,
-) -> dict:
+) -> ProfileRow:
     profiles = list_profiles(user_id=user_id)
     if profiles:
         return profiles[0]
@@ -237,7 +248,7 @@ def resolve_profile_id(
         return profile_id
 
     profile = get_or_create_default_profile(user_id=user_id)
-    return str(profile["profile_id"])
+    return str(profile.profile_id)
 
 def list_profile_keywords(
     profile_id: str,

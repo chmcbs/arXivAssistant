@@ -4,10 +4,23 @@ Generates top-K recommendations per (run_id, profile_id)
 
 import uuid
 import psycopg
+from dataclasses import dataclass
 from core.config import DEFAULT_USER_ID, get_daily_picks_k, get_keyword_boost_cap
 from core.db import get_database_url
 from core.keyword_search import SEARCH_DICTIONARY, paper_search_vector_sql
 from core.profiles import resolve_profile_id
+
+@dataclass(frozen=True)
+class RankedCandidateRow:
+    rank: int
+    arxiv_id: str
+    title: str
+    abstract: str
+    fallback_stage: int
+    candidate_window: str
+    base_dense_score: float
+    keyword_boost: float
+    final_score: float
 
 FETCH_RUN_SQL = """
 SELECT run_id, category, max_results
@@ -336,7 +349,22 @@ def generate_recommendations(
                     effective_k,
                 ),
             )
-            rows = cur.fetchall()
+            raw_rows = cur.fetchall()
+
+            candidates = [
+                RankedCandidateRow(
+                    rank=int(row[0]),
+                    arxiv_id=row[1],
+                    title=row[2],
+                    abstract=row[3] or "",
+                    fallback_stage=int(row[4]),
+                    candidate_window=row[5],
+                    base_dense_score=float(row[6]),
+                    keyword_boost=float(row[7]),
+                    final_score=float(row[8]),
+                )
+                for row in raw_rows
+            ]
 
             cur.execute(DELETE_EXISTING_SQL, (run_id, resolved_profile_id))
 
@@ -345,15 +373,15 @@ def generate_recommendations(
                     str(uuid.uuid4()),
                     run_id,
                     resolved_profile_id,
-                    row[1],
-                    int(row[0]),
-                    float(row[6]),
-                    float(row[7]),
-                    float(row[8]),
-                    row[5],
-                    int(row[4]),
+                    c.arxiv_id,
+                    c.rank,
+                    c.base_dense_score,
+                    c.keyword_boost,
+                    c.final_score,
+                    c.candidate_window,
+                    c.fallback_stage,
                 )
-                for row in rows
+                for c in candidates
             ]
 
             if inserts:
@@ -361,17 +389,17 @@ def generate_recommendations(
 
     return [
         {
-            "rank": int(row[0]),
-            "arxiv_id": row[1],
-            "title": row[2],
-            "abstract": row[3] or "",
-            "fallback_stage": int(row[4]),
-            "candidate_window": row[5],
-            "base_dense_score": float(row[6]),
-            "keyword_boost": float(row[7]),
-            "final_score": float(row[8]),
+            "rank": c.rank,
+            "arxiv_id": c.arxiv_id,
+            "title": c.title,
+            "abstract": c.abstract,
+            "fallback_stage": c.fallback_stage,
+            "candidate_window": c.candidate_window,
+            "base_dense_score": c.base_dense_score,
+            "keyword_boost": c.keyword_boost,
+            "final_score": c.final_score,
         }
-        for row in rows
+        for c in candidates
     ]
 
 if __name__ == "__main__":

@@ -3,12 +3,19 @@ Preference embedding and feedback handling
 """
 
 import psycopg
+from dataclasses import dataclass
 from core.embeddings import embed_texts
 import uuid
 from core.config import DEFAULT_USER_ID
 from core.db import get_database_url
 from core.profiles import resolve_profile_id
 from core.vector_helper import vector_literal
+
+@dataclass(frozen=True)
+class PreferenceFeedbackRow:
+    initial_interest_embedding: object
+    embedding: object
+    label: str | None
 
 UPSERT_PREFERENCE_EMBEDDING_SQL = """
 INSERT INTO profile_preferences (
@@ -181,22 +188,31 @@ def update_preference_embedding(
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(FETCH_PREFERENCE_AND_FEEDBACK_SQL, (resolved_profile_id,))
-            rows = cur.fetchall()
+            raw_rows = cur.fetchall()
 
-    if not rows:
+    if not raw_rows:
         raise ValueError(f"No preference profile found for profile_id={resolved_profile_id}")
 
-    initial_vector = coerce_vector(rows[0][0])
+    feedback_rows = [
+        PreferenceFeedbackRow(
+            initial_interest_embedding=row[0],
+            embedding=row[1],
+            label=row[2],
+        )
+        for row in raw_rows
+    ]
+
+    initial_vector = coerce_vector(feedback_rows[0].initial_interest_embedding)
 
     liked_vectors = [
-        coerce_vector(embedding)
-        for _, embedding, label in rows
-        if embedding is not None and label == "like"
+        coerce_vector(row.embedding)
+        for row in feedback_rows
+        if row.embedding is not None and row.label == "like"
     ]
     disliked_vectors = [
-        coerce_vector(embedding)
-        for _, embedding, label in rows
-        if embedding is not None and label == "dislike"
+        coerce_vector(row.embedding)
+        for row in feedback_rows
+        if row.embedding is not None and row.label == "dislike"
     ]
 
     num_feedbacks = len(liked_vectors) + len(disliked_vectors)

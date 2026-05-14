@@ -5,6 +5,7 @@ Tests user profile helpers
 from unittest.mock import MagicMock, Mock
 import pytest
 from core import profiles
+from core.profiles import ProfileRow
 
 def _mock_connection_with_cursor(cursor):
     connection = MagicMock()
@@ -77,11 +78,11 @@ def test_list_profiles_maps_rows_to_dicts(monkeypatch):
 
     results = profiles.list_profiles(user_id="user-1")
 
-    assert [item["profile_id"] for item in results] == ["p-1", "p-2"]
-    assert results[0]["profile_slot"] == 1
-    assert results[1]["category"] == "cs.CL"
-    assert results[0]["digest_enabled"] is True
-    assert results[1]["digest_enabled"] is False
+    assert [item.profile_id for item in results] == ["p-1", "p-2"]
+    assert results[0].profile_slot == 1
+    assert results[1].category == "cs.CL"
+    assert results[0].digest_enabled is True
+    assert results[1].digest_enabled is False
 
 def test_get_profile_returns_none_when_not_found(monkeypatch):
     cursor = MagicMock()
@@ -91,26 +92,26 @@ def test_get_profile_returns_none_when_not_found(monkeypatch):
     assert profiles.get_profile("missing") is None
 
 def test_get_or_create_default_profile_returns_existing_profile(monkeypatch):
-    monkeypatch.setattr(
-        profiles,
-        "list_profiles",
-        Mock(return_value=[{"profile_id": "p-1", "profile_slot": 1}]),
+    existing = ProfileRow(
+        profile_id="p-1", user_id="user-1", profile_slot=1,
+        category="cs.AI", interest_sentence="Interest", created_at=None, digest_enabled=True,
     )
+    monkeypatch.setattr(profiles, "list_profiles", Mock(return_value=[existing]))
     monkeypatch.setattr(profiles, "create_profile", Mock())
 
     result = profiles.get_or_create_default_profile(user_id="user-1")
 
-    assert result["profile_id"] == "p-1"
+    assert result.profile_id == "p-1"
     profiles.create_profile.assert_not_called()
 
 def test_get_or_create_default_profile_creates_when_missing(monkeypatch):
+    created = ProfileRow(
+        profile_id="p-new", user_id="user-1", profile_slot=1,
+        category="cs.AI", interest_sentence="Interest", created_at=None, digest_enabled=True,
+    )
     monkeypatch.setattr(profiles, "list_profiles", Mock(return_value=[]))
     monkeypatch.setattr(profiles, "create_profile", Mock(return_value="p-new"))
-    monkeypatch.setattr(
-        profiles,
-        "get_profile",
-        Mock(return_value={"profile_id": "p-new", "profile_slot": 1}),
-    )
+    monkeypatch.setattr(profiles, "get_profile", Mock(return_value=created))
 
     result = profiles.get_or_create_default_profile(
         user_id="user-1",
@@ -118,7 +119,7 @@ def test_get_or_create_default_profile_creates_when_missing(monkeypatch):
         interest_sentence="Interest",
     )
 
-    assert result["profile_id"] == "p-new"
+    assert result.profile_id == "p-new"
     profiles.create_profile.assert_called_once_with(
         user_id="user-1",
         category="cs.AI",

@@ -27,7 +27,7 @@ def run_pipeline(
         target_profile_ids = [profile_id]
     else:
         default_profile = get_or_create_default_profile(user_id=user_id)
-        target_profile_ids = [str(default_profile["profile_id"])]
+        target_profile_ids = [str(default_profile.profile_id)]
 
     print("1/4 Setting up database schema...")
     setup_database()
