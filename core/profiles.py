@@ -10,6 +10,113 @@ from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
 
 MAX_PROFILES_PER_USER = 3
 
+LOCK_OCCUPIED_SLOTS_SQL = """
+SELECT profile_slot
+FROM user_profiles
+WHERE user_id = %s
+ORDER BY profile_slot ASC
+FOR UPDATE;
+"""
+
+INSERT_PROFILE_SQL = """
+INSERT INTO user_profiles (
+    profile_id,
+    user_id,
+    profile_slot,
+    category,
+    interest_sentence
+)
+VALUES (%s, %s, %s, %s, %s);
+"""
+
+LIST_PROFILES_SQL = """
+SELECT
+    profile_id::text,
+    user_id,
+    profile_slot,
+    category,
+    interest_sentence,
+    created_at,
+    digest_enabled
+FROM user_profiles
+WHERE user_id = %s
+ORDER BY profile_slot ASC;
+"""
+
+GET_PROFILE_SQL = """
+SELECT
+    profile_id::text,
+    user_id,
+    profile_slot,
+    category,
+    interest_sentence,
+    created_at,
+    digest_enabled
+FROM user_profiles
+WHERE profile_id = %s;
+"""
+
+CHECK_PROFILE_OWNERSHIP_SQL = """
+SELECT 1
+FROM user_profiles
+WHERE profile_id = %s
+  AND user_id = %s;
+"""
+
+LIST_KEYWORDS_SQL = """
+SELECT keyword
+FROM profile_keywords
+WHERE profile_id = %s
+ORDER BY keyword ASC;
+"""
+
+COUNT_KEYWORDS_SQL = """
+SELECT COUNT(*)
+FROM profile_keywords
+WHERE profile_id = %s;
+"""
+
+INSERT_KEYWORD_SQL = """
+INSERT INTO profile_keywords (profile_id, keyword)
+VALUES (%s, %s)
+ON CONFLICT (profile_id, keyword) DO NOTHING
+RETURNING keyword;
+"""
+
+DELETE_KEYWORD_SQL = """
+DELETE FROM profile_keywords
+WHERE profile_id = %s
+  AND keyword = %s;
+"""
+
+LIST_DIGEST_SELECTED_SQL = """
+SELECT profile_id::text
+FROM user_profiles
+WHERE user_id = %s
+  AND digest_enabled = TRUE
+ORDER BY profile_slot ASC;
+"""
+
+MATCH_USER_PROFILES_SQL = """
+SELECT profile_id::text
+FROM user_profiles
+WHERE user_id = %s
+  AND profile_id = ANY(%s::uuid[]);
+"""
+
+DISABLE_ALL_DIGESTS_SQL = """
+UPDATE user_profiles
+SET digest_enabled = FALSE
+WHERE user_id = %s;
+"""
+
+ENABLE_DIGESTS_SQL = """
+UPDATE user_profiles
+SET digest_enabled = TRUE
+WHERE user_id = %s
+  AND profile_id = ANY(%s::uuid[]);
+"""
+
 def _validate_interest_sentence(interest_sentence: str) -> str:
     value = interest_sentence.strip()
     if not value:
@@ -47,31 +154,13 @@ def create_profile(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT profile_slot
-                FROM user_profiles
-                WHERE user_id = %s
-                ORDER BY profile_slot ASC
-                FOR UPDATE;
-                """,
-                (user_id,),
-            )
+            cur.execute(LOCK_OCCUPIED_SLOTS_SQL, (user_id,))
             occupied_slots = {int(row[0]) for row in cur.fetchall()}
 
             profile_slot = _pick_next_available_slot(occupied_slots)
 
             cur.execute(
-                """
-                INSERT INTO user_profiles (
-                    profile_id,
-                    user_id,
-                    profile_slot,
-                    category,
-                    interest_sentence
-                )
-                VALUES (%s, %s, %s, %s, %s);
-                """,
+                INSERT_PROFILE_SQL,
                 (
                     profile_id,
                     user_id,
@@ -86,22 +175,7 @@ def create_profile(
 def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    profile_id::text,
-                    user_id,
-                    profile_slot,
-                    category,
-                    interest_sentence,
-                    created_at,
-                    digest_enabled
-                FROM user_profiles
-                WHERE user_id = %s
-                ORDER BY profile_slot ASC;
-                """,
-                (user_id,),
-            )
+            cur.execute(LIST_PROFILES_SQL, (user_id,))
             rows = cur.fetchall()
 
     return [
@@ -120,21 +194,7 @@ def list_profiles(user_id: str = DEFAULT_USER_ID) -> list[dict]:
 def get_profile(profile_id: str) -> dict | None:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    profile_id::text,
-                    user_id,
-                    profile_slot,
-                    category,
-                    interest_sentence,
-                    created_at,
-                    digest_enabled
-                FROM user_profiles
-                WHERE profile_id = %s;
-                """,
-                (profile_id,),
-            )
+            cur.execute(GET_PROFILE_SQL, (profile_id,))
             row = cur.fetchone()
 
     if row is None:
@@ -185,27 +245,11 @@ def list_profile_keywords(
 ) -> list[str]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1
-                FROM user_profiles
-                WHERE profile_id = %s
-                  AND user_id = %s;
-                """,
-                (profile_id, user_id),
-            )
+            cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
 
-            cur.execute(
-                """
-                SELECT keyword
-                FROM profile_keywords
-                WHERE profile_id = %s
-                ORDER BY keyword ASC;
-                """,
-                (profile_id,),
-            )
+            cur.execute(LIST_KEYWORDS_SQL, (profile_id,))
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
@@ -219,52 +263,21 @@ def add_profile_keyword(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1
-                FROM user_profiles
-                WHERE profile_id = %s
-                  AND user_id = %s;
-                """,
-                (profile_id, user_id),
-            )
+            cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
 
-            cur.execute(
-                """
-                SELECT COUNT(*)
-                FROM profile_keywords
-                WHERE profile_id = %s;
-                """,
-                (profile_id,),
-            )
+            cur.execute(COUNT_KEYWORDS_SQL, (profile_id,))
             current_count = int(cur.fetchone()[0])
 
-            cur.execute(
-                """
-                INSERT INTO profile_keywords (profile_id, keyword)
-                VALUES (%s, %s)
-                ON CONFLICT (profile_id, keyword) DO NOTHING
-                RETURNING keyword;
-                """,
-                (profile_id, normalized_keyword),
-            )
+            cur.execute(INSERT_KEYWORD_SQL, (profile_id, normalized_keyword))
             inserted = cur.fetchone()
             if inserted is not None and current_count >= MAX_KEYWORDS_PER_PROFILE:
                 raise ValueError(
                     f"profile keyword cap reached ({MAX_KEYWORDS_PER_PROFILE})"
                 )
 
-            cur.execute(
-                """
-                SELECT keyword
-                FROM profile_keywords
-                WHERE profile_id = %s
-                ORDER BY keyword ASC;
-                """,
-                (profile_id,),
-            )
+            cur.execute(LIST_KEYWORDS_SQL, (profile_id,))
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
@@ -278,36 +291,13 @@ def remove_profile_keyword(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1
-                FROM user_profiles
-                WHERE profile_id = %s
-                  AND user_id = %s;
-                """,
-                (profile_id, user_id),
-            )
+            cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
             if cur.fetchone() is None:
                 raise ValueError("profile not found for user")
 
-            cur.execute(
-                """
-                DELETE FROM profile_keywords
-                WHERE profile_id = %s
-                  AND keyword = %s;
-                """,
-                (profile_id, normalized_keyword),
-            )
+            cur.execute(DELETE_KEYWORD_SQL, (profile_id, normalized_keyword))
 
-            cur.execute(
-                """
-                SELECT keyword
-                FROM profile_keywords
-                WHERE profile_id = %s
-                ORDER BY keyword ASC;
-                """,
-                (profile_id,),
-            )
+            cur.execute(LIST_KEYWORDS_SQL, (profile_id,))
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
@@ -315,16 +305,7 @@ def remove_profile_keyword(
 def list_digest_selected_profile_ids(user_id: str = DEFAULT_USER_ID) -> list[str]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT profile_id::text
-                FROM user_profiles
-                WHERE user_id = %s
-                  AND digest_enabled = TRUE
-                ORDER BY profile_slot ASC;
-                """,
-                (user_id,),
-            )
+            cur.execute(LIST_DIGEST_SELECTED_SQL, (user_id,))
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
@@ -339,48 +320,16 @@ def set_digest_profile_selection(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT profile_id::text
-                FROM user_profiles
-                WHERE user_id = %s
-                  AND profile_id = ANY(%s::uuid[]);
-                """,
-                (user_id, requested_profile_ids),
-            )
+            cur.execute(MATCH_USER_PROFILES_SQL, (user_id, requested_profile_ids))
             matched_ids = {row[0] for row in cur.fetchall()}
             missing_ids = sorted(set(requested_profile_ids) - matched_ids)
             if missing_ids:
                 raise ValueError("some profile_ids do not belong to user")
 
-            cur.execute(
-                """
-                UPDATE user_profiles
-                SET digest_enabled = FALSE
-                WHERE user_id = %s;
-                """,
-                (user_id,),
-            )
-            cur.execute(
-                """
-                UPDATE user_profiles
-                SET digest_enabled = TRUE
-                WHERE user_id = %s
-                  AND profile_id = ANY(%s::uuid[]);
-                """,
-                (user_id, requested_profile_ids),
-            )
+            cur.execute(DISABLE_ALL_DIGESTS_SQL, (user_id,))
+            cur.execute(ENABLE_DIGESTS_SQL, (user_id, requested_profile_ids))
 
-            cur.execute(
-                """
-                SELECT profile_id::text
-                FROM user_profiles
-                WHERE user_id = %s
-                  AND digest_enabled = TRUE
-                ORDER BY profile_slot ASC;
-                """,
-                (user_id,),
-            )
+            cur.execute(LIST_DIGEST_SELECTED_SQL, (user_id,))
             rows = cur.fetchall()
 
     selected = [row[0] for row in rows]

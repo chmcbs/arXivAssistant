@@ -8,19 +8,37 @@ from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
-def get_papers_missing_embeddings(limit: int) -> list[dict]:
-    query = """
-    SELECT p.arxiv_id, p.title, p.abstract
-    FROM papers p
-    LEFT JOIN paper_embeddings e ON p.arxiv_id = e.arxiv_id
-    WHERE e.arxiv_id IS NULL
-    ORDER BY p.inserted_at ASC
-    LIMIT %s;
-    """
+FETCH_PAPERS_MISSING_EMBEDDINGS_SQL = """
+SELECT p.arxiv_id, p.title, p.abstract
+FROM papers p
+LEFT JOIN paper_embeddings e ON p.arxiv_id = e.arxiv_id
+WHERE e.arxiv_id IS NULL
+ORDER BY p.inserted_at ASC
+LIMIT %s;
+"""
 
+UPSERT_EMBEDDING_SQL = """
+INSERT INTO paper_embeddings (
+    arxiv_id,
+    embedding,
+    model_name
+)
+VALUES (
+    %(arxiv_id)s,
+    %(embedding)s,
+    %(model_name)s
+)
+ON CONFLICT (arxiv_id)
+DO UPDATE SET
+    embedding = EXCLUDED.embedding,
+    model_name = EXCLUDED.model_name,
+    embedded_at = NOW();
+"""
+
+def get_papers_missing_embeddings(limit: int) -> list[dict]:
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (limit,))
+            cur.execute(FETCH_PAPERS_MISSING_EMBEDDINGS_SQL, (limit,))
             rows = cur.fetchall()
 
     return [
@@ -42,24 +60,6 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return embeddings.tolist()
 
 def save_embeddings(papers: list[dict], embeddings: list[list[float]]) -> int:
-    query = """
-    INSERT INTO paper_embeddings (
-        arxiv_id,
-        embedding,
-        model_name
-    )
-    VALUES (
-        %(arxiv_id)s,
-        %(embedding)s,
-        %(model_name)s
-    )
-    ON CONFLICT (arxiv_id)
-    DO UPDATE SET
-        embedding = EXCLUDED.embedding,
-        model_name = EXCLUDED.model_name,
-        embedded_at = NOW();
-    """
-
     rows = [
         {
             "arxiv_id": paper["arxiv_id"],
@@ -71,7 +71,7 @@ def save_embeddings(papers: list[dict], embeddings: list[list[float]]) -> int:
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.executemany(query, rows)
+            cur.executemany(UPSERT_EMBEDDING_SQL, rows)
 
     return len(rows)
 

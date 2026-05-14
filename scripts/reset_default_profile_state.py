@@ -8,6 +8,14 @@ from core.db import get_database_url
 from core.preferences import initialize_preference_embedding
 from core.profiles import get_or_create_default_profile
 
+DELETE_PROFILE_FEEDBACK_SQL = """
+DELETE FROM paper_feedback WHERE profile_id = %s;
+"""
+
+DELETE_PROFILE_RECOMMENDATIONS_SQL = """
+DELETE FROM recommendations WHERE profile_id = %s;
+"""
+
 def reset_default_profile_state(
     user_id: str = DEFAULT_USER_ID,
     interest_text: str = DEFAULT_INTEREST_TEXT,
@@ -20,8 +28,8 @@ def reset_default_profile_state(
 
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM paper_feedback WHERE profile_id = %s;", (profile_id,))
-            cur.execute("DELETE FROM recommendations WHERE profile_id = %s;", (profile_id,))
+            cur.execute(DELETE_PROFILE_FEEDBACK_SQL, (profile_id,))
+            cur.execute(DELETE_PROFILE_RECOMMENDATIONS_SQL, (profile_id,))
 
     initialize_preference_embedding(
         interest_text,
