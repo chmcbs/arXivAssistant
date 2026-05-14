@@ -15,17 +15,40 @@ def get_daily_picks_payload(
     user_id: str,
     profile_id: str | None,
     resolve_profile: Callable[[str, str | None], dict],
+    list_digest_selected_profile_ids: Callable[[str], list[str]],
     fetch_latest_picks: Callable[[str], list],
 ) -> dict:
-    profile = resolve_profile(user_id=user_id, profile_id=profile_id)
-    resolved_profile_id = str(profile["profile_id"])
-    rows = fetch_latest_picks(resolved_profile_id)
+    if profile_id is not None:
+        target_profile_ids = [profile_id]
+    else:
+        target_profile_ids = list_digest_selected_profile_ids(user_id=user_id)
+        if not target_profile_ids:
+            raise BadRequestError("at least one profile must be selected for digest generation")
+
+    sections = []
+    for target_profile_id in target_profile_ids:
+        profile = resolve_profile(user_id=user_id, profile_id=target_profile_id)
+        resolved_profile_id = str(profile["profile_id"])
+        rows = fetch_latest_picks(resolved_profile_id)
+        sections.append(
+            {
+                "profile_id": resolved_profile_id,
+                "profile_slot": profile["profile_slot"],
+                "category": profile["category"],
+                "interest_sentence": profile["interest_sentence"],
+                "needs_generation": not rows,
+                "picks": [to_public_pick(row) for row in rows],
+            }
+        )
+
+    primary_section = sections[0]
 
     return {
         "user_id": user_id,
-        "profile_id": resolved_profile_id,
-        "needs_generation": not rows,
-        "picks": [to_public_pick(row) for row in rows],
+        "profile_id": primary_section["profile_id"],
+        "needs_generation": any(section["needs_generation"] for section in sections),
+        "picks": primary_section["picks"],
+        "sections": sections,
     }
 
 def get_debug_daily_picks_payload(
@@ -73,7 +96,6 @@ def generate_daily_picks_payload(
         if not target_profile_ids:
             raise BadRequestError("at least one profile must be selected for digest generation")
 
-    primary_profile_id = target_profile_ids[0]
     summary = run_pipeline(
         user_id=request.user_id,
         profile_ids=target_profile_ids,
@@ -82,7 +104,7 @@ def generate_daily_picks_payload(
     )
     picks_payload = get_daily_picks_payload(
         user_id=request.user_id,
-        profile_id=primary_profile_id,
+        profile_id=request.profile_id,
     )
 
     recommendations_by_run_profile = summary.get("recommendations_by_run_profile", {})
@@ -98,13 +120,14 @@ def generate_daily_picks_payload(
 
     return {
         "user_id": request.user_id,
-        "profile_id": primary_profile_id,
+        "profile_id": picks_payload["profile_id"],
         "generated_profile_ids": target_profile_ids,
         "run_ids": summary["run_ids"],
         "embedded_count": summary["embedded_count"],
         "recommendation_counts": recommendation_counts,
         "needs_generation": picks_payload["needs_generation"],
         "picks": picks_payload["picks"],
+        "sections": picks_payload["sections"],
     }
 
 def save_feedback_payload(

@@ -102,6 +102,7 @@ def get_daily_picks_payload(
             user_id=user_id,
             profile_id=profile_id,
             resolve_profile=_resolve_profile,
+            list_digest_selected_profile_ids=list_digest_selected_profile_ids,
             fetch_latest_picks=_fetch_latest_picks,
         )
     except ValueError as error:

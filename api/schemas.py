@@ -35,11 +35,20 @@ class ProfileSummary(BaseModel):
     created_at: datetime
     preference_updated_at: datetime | None = None
 
+class DigestSection(BaseModel):
+    profile_id: str
+    profile_slot: int
+    category: str
+    interest_sentence: str
+    needs_generation: bool
+    picks: list[PublicPick]
+
 class DailyPicksResponse(BaseModel):
     user_id: str
     profile_id: str
     needs_generation: bool
     picks: list[PublicPick]
+    sections: list[DigestSection]
 
 class DebugDailyPicksResponse(BaseModel):
     user_id: str
@@ -65,6 +74,7 @@ class GenerateDailyPicksResponse(BaseModel):
     recommendation_counts: dict[str, int]
     needs_generation: bool
     picks: list[PublicPick]
+    sections: list[DigestSection]
 
 class FeedbackRequest(BaseModel):
     arxiv_id: str

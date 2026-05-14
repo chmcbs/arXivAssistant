@@ -48,7 +48,15 @@ def test_get_daily_picks_returns_empty_state():
     payload = get_daily_picks_payload(
         user_id="default",
         profile_id=None,
-        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        resolve_profile=Mock(
+            return_value={
+                "profile_id": "profile-1",
+                "profile_slot": 1,
+                "category": "cs.AI",
+                "interest_sentence": "Efficient LLM systems",
+            }
+        ),
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
         fetch_latest_picks=Mock(return_value=[]),
     )
 
@@ -57,13 +65,31 @@ def test_get_daily_picks_returns_empty_state():
         "profile_id": "profile-1",
         "needs_generation": True,
         "picks": [],
+        "sections": [
+            {
+                "profile_id": "profile-1",
+                "profile_slot": 1,
+                "category": "cs.AI",
+                "interest_sentence": "Efficient LLM systems",
+                "needs_generation": True,
+                "picks": [],
+            }
+        ],
     }
 
 def test_get_daily_picks_returns_public_fields():
     payload = get_daily_picks_payload(
         user_id="default",
         profile_id=None,
-        resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
+        resolve_profile=Mock(
+            return_value={
+                "profile_id": "profile-1",
+                "profile_slot": 1,
+                "category": "cs.AI",
+                "interest_sentence": "Efficient LLM systems",
+            }
+        ),
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1"]),
         fetch_latest_picks=Mock(return_value=[_pick_row()]),
     )
 
@@ -78,6 +104,41 @@ def test_get_daily_picks_returns_public_fields():
             "final_score": 0.9,
         }
     ]
+    assert payload["sections"][0]["profile_id"] == "profile-1"
+    assert payload["sections"][0]["category"] == "cs.AI"
+
+def test_get_daily_picks_returns_multi_profile_sections():
+    resolve_profile = Mock(
+        side_effect=[
+            {
+                "profile_id": "profile-1",
+                "profile_slot": 1,
+                "category": "cs.AI",
+                "interest_sentence": "Efficient LLM systems",
+            },
+            {
+                "profile_id": "profile-2",
+                "profile_slot": 2,
+                "category": "cs.CL",
+                "interest_sentence": "Robust NLP evaluation",
+            },
+        ]
+    )
+    fetch_latest_picks = Mock(side_effect=[[_pick_row(rank=1)], []])
+    payload = get_daily_picks_payload(
+        user_id="default",
+        profile_id=None,
+        resolve_profile=resolve_profile,
+        list_digest_selected_profile_ids=Mock(return_value=["profile-1", "profile-2"]),
+        fetch_latest_picks=fetch_latest_picks,
+    )
+
+    assert payload["profile_id"] == "profile-1"
+    assert payload["needs_generation"] is True
+    assert payload["picks"][0]["arxiv_id"] == "2601.00001"
+    assert [section["profile_id"] for section in payload["sections"]] == ["profile-1", "profile-2"]
+    assert payload["sections"][1]["needs_generation"] is True
+    assert payload["sections"][1]["picks"] == []
 
 def test_get_debug_daily_picks_includes_ranking_metadata():
     payload = get_debug_daily_picks_payload(
@@ -120,6 +181,24 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
                 "profile_id": "profile-1",
                 "needs_generation": False,
                 "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
+                "sections": [
+                    {
+                        "profile_id": "profile-1",
+                        "profile_slot": 1,
+                        "category": "cs.AI",
+                        "interest_sentence": "Efficient LLM systems",
+                        "needs_generation": False,
+                        "picks": [{"rank": 1, "arxiv_id": "2601.00001"}],
+                    },
+                    {
+                        "profile_id": "profile-2",
+                        "profile_slot": 2,
+                        "category": "cs.CL",
+                        "interest_sentence": "Robust NLP evaluation",
+                        "needs_generation": False,
+                        "picks": [{"rank": 1, "arxiv_id": "2601.00002"}],
+                    },
+                ],
             }
         ),
     )
@@ -130,11 +209,13 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         max_results=123,
         embedding_limit=456,
     )
+    assert payload["profile_id"] == "profile-1"
     assert payload["generated_profile_ids"] == ["profile-1", "profile-2"]
     assert payload["run_ids"] == ["run-123"]
     assert payload["embedded_count"] == 5
     assert payload["recommendation_counts"] == {"run-123": 2}
     assert payload["picks"] == [{"rank": 1, "arxiv_id": "2601.00001"}]
+    assert len(payload["sections"]) == 2
 
 def test_generate_daily_picks_rejects_multiple_categories():
     with pytest.raises(BadRequestError) as error:
