@@ -83,6 +83,11 @@ def preferences_page() -> FileResponse:
     return FileResponse(frontend_dir / "preferences.html")
 
 
+@app.get("/digest", response_class=FileResponse)
+def digest_page() -> FileResponse:
+    return FileResponse(frontend_dir / "digest.html")
+
+
 @app.get("/validate", response_class=FileResponse)
 def validate() -> FileResponse:
     return FileResponse(frontend_dir / "validate.html")
@@ -103,9 +108,10 @@ def auth_request_magic_link(request: RequestMagicLinkRequest) -> dict:
 
 
 @app.get("/auth/magic-link/verify")
-def auth_verify_magic_link(token: str) -> RedirectResponse:
+def auth_verify_magic_link(token: str, next: str = "/preferences") -> RedirectResponse:
     payload = verify_magic_link_payload(token=token)
-    response = RedirectResponse(url="/preferences", status_code=302)
+    redirect_target = next if next.startswith("/") else "/preferences"
+    response = RedirectResponse(url=redirect_target, status_code=302)
     response.set_cookie(
         key="session_id",
         value=payload["session_id"],

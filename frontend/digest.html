@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daily Digest - arXiv Assistant</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">arXiv Assistant</a>
+    <div class="row">
+      <a class="link-btn" href="/preferences">Preferences</a>
+      <a class="link-btn" href="/digest">Digest</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="auth-gate" class="panel hidden">
+      <h1>Daily Digest Preview</h1>
+      <p class="muted">Sign in by email to preview your daily digest.</p>
+      <form id="auth-form" class="stack">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" placeholder="you@example.com" required>
+        <button type="submit">Send magic link</button>
+      </form>
+      <p id="auth-status" class="status muted"></p>
+      <p id="auth-link-wrap" class="hidden">
+        Dev magic link:
+        <a id="auth-link" href="#">open digest preview</a>
+      </p>
+    </section>
+
+    <section id="digest-app" class="hidden">
+      <div class="section-header">
+        <h1>Daily Digest Preview</h1>
+        <button id="generate-btn" type="button">Generate new digest</button>
+      </div>
+      <p class="muted">
+        Simulation view for daily email content. Uses profile sections and raw scores.
+      </p>
+      <p id="session-label" class="status muted"></p>
+      <p id="digest-status" class="status muted"></p>
+      <div id="digest-empty" class="panel hidden">
+        <p class="muted">No picks yet. Generate a digest to preview sections.</p>
+      </div>
+      <div id="sections-wrap" class="stack"></div>
+    </section>
+  </main>
+
+  <template id="section-template">
+    <article class="panel digest-section">
+      <div class="row between">
+        <h2 class="digest-section-title"></h2>
+        <span class="tiny muted digest-category"></span>
+      </div>
+      <p class="tiny muted digest-interest"></p>
+      <ol class="digest-picks"></ol>
+    </article>
+  </template>
+
+  <script src="/static/api-client.js"></script>
+  <script src="/static/digest.js"></script>
+</body>
+</html>

@@ -115,16 +115,19 @@ def test_validate_route_returns_internal_validation_ui():
     assert "Profile Keywords" in response.text
 
 
-def test_landing_and_preferences_pages_are_served():
+def test_landing_preferences_and_digest_pages_are_served():
     client = TestClient(routes.app)
 
     landing = client.get("/")
     prefs = client.get("/preferences")
+    digest = client.get("/digest")
 
     assert landing.status_code == 200
     assert "<title>arXiv Assistant</title>" in landing.text
     assert prefs.status_code == 200
     assert "<title>Preferences - arXiv Assistant</title>" in prefs.text
+    assert digest.status_code == 200
+    assert "<title>Daily Digest - arXiv Assistant</title>" in digest.text
 
 
 def test_magic_link_request_route_returns_payload(monkeypatch):
@@ -164,3 +167,25 @@ def test_magic_link_verify_sets_session_cookie_and_redirects(monkeypatch):
     assert response.status_code == 302
     assert response.headers["location"] == "/preferences"
     assert "session_id=session-123" in response.headers["set-cookie"]
+
+
+def test_magic_link_verify_supports_safe_next_redirect(monkeypatch):
+    monkeypatch.setattr(
+        routes,
+        "verify_magic_link_payload",
+        Mock(
+            return_value={
+                "verified": True,
+                "session_id": "session-456",
+                "user_id": "x@example.com",
+                "email": "x@example.com",
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+    response = client.get(
+        "/auth/magic-link/verify?token=abc&next=/digest", follow_redirects=False
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/digest"

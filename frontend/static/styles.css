@@ -189,3 +189,36 @@ button {
   overflow: auto;
   font-size: 12px;
 }
+
+.digest-section-title {
+  margin: 0;
+}
+
+.digest-picks {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.digest-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.digest-pick-title {
+  color: #111827;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.digest-pick-title:hover {
+  text-decoration: underline;
+}
+
+.digest-score {
+  font-size: 12px;
+  color: #6b7280;
+}
