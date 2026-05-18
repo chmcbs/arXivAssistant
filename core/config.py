@@ -42,5 +42,13 @@ def get_keyword_boost_cap() -> float:
         raise ValueError("KEYWORD_BOOST_CAP must be non-negative")
     return raw_value
 
+
+# URLs
 def get_app_base_url() -> str:
     return os.getenv("APP_BASE_URL", "http://localhost:8000")
+
+
+# Debugging
+def is_debug_digest_data_reset_enabled() -> bool:
+    raw = os.getenv("ALLOW_DEBUG_DIGEST_DATA_RESET", "")
+    return raw.strip().lower() in ("1", "true", "yes", "on")

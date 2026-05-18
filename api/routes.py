@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from api.dependencies import (
     add_profile_keyword_payload,
     create_profile_payload,
+    debug_reset_digest_data_payload,
+    debug_reset_profile_data_payload,
     delete_profile_payload,
     generate_daily_picks_payload,
     get_auth_session_payload,
@@ -33,6 +35,8 @@ from api.schemas import (
     CreateProfileResponse,
     DailyPicksResponse,
     DebugDailyPicksResponse,
+    DebugDigestDataResetResponse,
+    DebugProfileDataResetResponse,
     DeleteProfileRequest,
     DeleteProfileResponse,
     FeedbackRequest,
@@ -164,6 +168,15 @@ def daily_picks_generate(request: GenerateDailyPicksRequest, http_request: Reque
     return generate_daily_picks_payload(request)
 
 
+@app.post("/debug/digest-data/reset", response_model=DebugDigestDataResetResponse)
+def debug_reset_digest_data(request: Request) -> dict:
+    return debug_reset_digest_data_payload(request.cookies.get("session_id"))
+
+
+########################################
+############### FEEDBACK ###############
+########################################
+
 @app.post("/feedback", response_model=FeedbackResponse)
 def feedback(request: FeedbackRequest, http_request: Request) -> dict:
     request.user_id = _resolve_user_id(request.user_id, http_request)
@@ -218,6 +231,11 @@ def profiles_delete(
 ) -> dict:
     request.user_id = _resolve_user_id(request.user_id, http_request)
     return delete_profile_payload(profile_id=profile_id, request=request)
+
+
+@app.post("/debug/profile-data/reset", response_model=DebugProfileDataResetResponse)
+def debug_reset_profile_data(request: Request) -> dict:
+    return debug_reset_profile_data_payload(request.cookies.get("session_id"))
 
 
 ########################################

@@ -45,9 +45,15 @@ from api.services.profiles import (
     update_profile_payload as update_profile_payload_service,
     update_digest_selection_payload as update_digest_selection_payload_service,
 )
+from api.services.debug_digest_reset import reset_papers_and_runs, reset_user_profiles
 from api.unit_of_work import ApiUnitOfWork, open_api_unit_of_work
 from core.auth import create_magic_link, get_session_user, verify_magic_link
-from core.config import DEFAULT_USER_ID, get_app_base_url, get_arxiv_categories
+from core.config import (
+    DEFAULT_USER_ID,
+    get_app_base_url,
+    get_arxiv_categories,
+    is_debug_digest_data_reset_enabled,
+)
 from core.db import get_database_url
 from core.preferences import (
     initialize_preference_embedding,
@@ -235,6 +241,22 @@ def generate_daily_picks_payload(
         raise _to_http_exception(error) from error
 
 
+def debug_reset_digest_data_payload(session_id: str | None) -> dict:
+    session = get_auth_session_payload(session_id)
+    if not session["authenticated"]:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    if not is_debug_digest_data_reset_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Debug data reset is disabled. "
+                "Set ALLOW_DEBUG_DIGEST_DATA_RESET=1 in the environment."
+            ),
+        )
+    with open_api_unit_of_work() as uow:
+        return reset_papers_and_runs(uow.conn)
+
+
 ########################################
 ############### FEEDBACK ###############
 ########################################
@@ -406,6 +428,22 @@ def update_digest_selection_payload(
         raise _to_http_exception(error) from error
 
 
+def debug_reset_profile_data_payload(session_id: str | None) -> dict:
+    session = get_auth_session_payload(session_id)
+    if not session["authenticated"]:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    if not is_debug_digest_data_reset_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Debug data reset is disabled. "
+                "Set ALLOW_DEBUG_DIGEST_DATA_RESET=1 in the environment."
+            ),
+        )
+    with open_api_unit_of_work() as uow:
+        return reset_user_profiles(uow.conn)
+
+
 ########################################
 ############### KEYWORDS ###############
 ########################################
@@ -551,3 +589,4 @@ def get_auth_session_payload(
         return {"authenticated": False, "user_id": None, "email": None}
     user_id, email = resolved
     return {"authenticated": True, "user_id": user_id, "email": email}
+

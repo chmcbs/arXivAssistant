@@ -8,6 +8,7 @@ const digestStatus = document.getElementById("digest-status");
 const emptyState = document.getElementById("digest-empty");
 const sectionsWrap = document.getElementById("sections-wrap");
 const generateBtn = document.getElementById("generate-btn");
+const debugResetDbBtn = document.getElementById("debug-reset-db-btn");
 const sectionTemplate = document.getElementById("section-template");
 
 function setStatus(message, isError) {
@@ -128,6 +129,35 @@ generateBtn.addEventListener("click", async () => {
     await generateDigest();
   } catch (error) {
     setStatus(String(error.message || error), true);
+  }
+});
+
+debugResetDbBtn.addEventListener("click", async () => {
+  var ok = window.confirm(
+    "Delete ALL papers, ingestion runs, recommendations, and feedback from the database?\n\n" +
+      "Profiles, keywords, and profile preferences are kept.\n\n" +
+      "Requires ALLOW_DEBUG_DIGEST_DATA_RESET=1 on the server.",
+  );
+  if (!ok) {
+    return;
+  }
+  debugResetDbBtn.disabled = true;
+  setStatus("Resetting paper and feedback data...", false);
+  try {
+    var result = await apiRequest("/debug/digest-data/reset", "POST");
+    await loadDigest();
+    setStatus(
+      "Debug reset complete. Removed " +
+        result.deleted_runs +
+        " run(s) and " +
+        result.deleted_papers +
+        " paper(s). Profiles and keywords unchanged.",
+      false,
+    );
+  } catch (error) {
+    setStatus(String(error.message || error), true);
+  } finally {
+    debugResetDbBtn.disabled = false;
   }
 });
 

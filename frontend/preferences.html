@@ -35,7 +35,17 @@
     <section id="prefs-app" class="hidden">
       <div class="section-header">
         <h1>Profiles</h1>
-        <button id="add-profile-btn">+ Add profile</button>
+        <div class="row">
+          <button id="add-profile-btn">+ Add profile</button>
+          <button
+            id="debug-reset-profiles-btn"
+            type="button"
+            class="danger"
+            title="Requires env ALLOW_DEBUG_DIGEST_DATA_RESET=1; deletes all profiles, preferences, and keywords (every user)"
+          >
+            Hard reset profiles (debug)
+          </button>
+        </div>
       </div>
       <p id="prefs-status" class="status muted"></p>
       <div id="profiles-grid" class="profiles-grid"></div>
@@ -85,6 +95,6 @@
   </template>
 
   <script src="/static/api-client.js"></script>
-  <script src="/static/preferences.js"></script>
+  <script src="/static/preferences.js?v=2"></script>
 </body>
 </html>

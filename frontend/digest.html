@@ -35,7 +35,17 @@
     <section id="digest-app" class="hidden">
       <div class="section-header">
         <h1>Daily Digest Preview</h1>
-        <button id="generate-btn" type="button">Generate new digest</button>
+        <div class="row">
+          <button id="generate-btn" type="button">Generate new digest</button>
+          <button
+            id="debug-reset-db-btn"
+            type="button"
+            class="danger"
+            title="Requires env ALLOW_DEBUG_DIGEST_DATA_RESET=1; deletes all papers, runs, picks, and feedback"
+          >
+            Hard reset papers (debug)
+          </button>
+        </div>
       </div>
       <p class="muted">
         Simulation view for daily email content. Uses profile sections and raw scores.
@@ -60,6 +70,6 @@
   </template>
 
   <script src="/static/api-client.js"></script>
-  <script src="/static/digest.js?v=2"></script>
+  <script src="/static/digest.js?v=5"></script>
 </body>
 </html>

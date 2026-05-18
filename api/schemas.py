@@ -218,3 +218,12 @@ class AuthSessionResponse(BaseModel):
     authenticated: bool
     user_id: str | None = None
     email: str | None = None
+
+
+class DebugDigestDataResetResponse(BaseModel):
+    deleted_runs: int
+    deleted_papers: int
+
+
+class DebugProfileDataResetResponse(BaseModel):
+    deleted_profiles: int

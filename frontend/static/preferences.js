@@ -7,6 +7,7 @@ const sessionLabel = document.getElementById("session-label");
 const prefsStatus = document.getElementById("prefs-status");
 const profilesGrid = document.getElementById("profiles-grid");
 const addProfileBtn = document.getElementById("add-profile-btn");
+const debugResetProfilesBtn = document.getElementById("debug-reset-profiles-btn");
 const cardTemplate = document.getElementById("profile-card-template");
 
 let categories = [];
@@ -538,6 +539,30 @@ addProfileBtn.addEventListener("click", async () => {
   });
   renderProfiles();
   setStatus("Fill in the new profile card and click Create profile.", false);
+});
+
+debugResetProfilesBtn.addEventListener("click", async () => {
+  const ok = window.confirm(
+    "Delete ALL user profiles from the database (every account)?\n\n" +
+      "CASCADE removes profile_preferences, profile_keywords, paper_feedback, " +
+      "and recommendations tied to those profiles.\n\n" +
+      "Papers and runs are not removed; use Hard reset papers on the Digest page if you need a clean corpus.\n\n" +
+      "Requires ALLOW_DEBUG_DIGEST_DATA_RESET=1 on the server.",
+  );
+  if (!ok) {
+    return;
+  }
+  debugResetProfilesBtn.disabled = true;
+  try {
+    const result = await apiRequest("/debug/profile-data/reset", "POST");
+    await loadProfiles();
+    prefsStatus.textContent = `Removed ${result.deleted_profiles} profile(s). Preferences and keywords cleared.`;
+    prefsStatus.style.color = "#6b7280";
+  } catch (error) {
+    setStatus(String(error.message || error), true);
+  } finally {
+    debugResetProfilesBtn.disabled = false;
+  }
 });
 
 async function init() {
