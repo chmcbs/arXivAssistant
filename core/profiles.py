@@ -104,7 +104,7 @@ LIST_KEYWORDS_SQL = """
 SELECT keyword
 FROM profile_keywords
 WHERE profile_id = %s
-ORDER BY keyword ASC;
+ORDER BY created_at ASC, keyword ASC;
 """
 
 COUNT_KEYWORDS_SQL = """

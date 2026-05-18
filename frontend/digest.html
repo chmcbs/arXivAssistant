@@ -10,7 +10,8 @@
   <header class="topbar">
     <a class="brand" href="/">arXiv Assistant</a>
     <div class="row">
-      <a class="link-btn" href="/preferences">Preferences</a>
+      <span id="session-label" class="muted">Checking session...</span>
+      <a class="link-btn" href="/preferences">Profiles</a>
       <a class="link-btn" href="/digest">Digest</a>
     </div>
   </header>
@@ -39,7 +40,6 @@
       <p class="muted">
         Simulation view for daily email content. Uses profile sections and raw scores.
       </p>
-      <p id="session-label" class="status muted"></p>
       <p id="digest-status" class="status muted"></p>
       <div id="digest-empty" class="panel hidden">
         <p class="muted">No picks yet. Generate a digest to preview sections.</p>
@@ -60,6 +60,6 @@
   </template>
 
   <script src="/static/api-client.js"></script>
-  <script src="/static/digest.js"></script>
+  <script src="/static/digest.js?v=2"></script>
 </body>
 </html>

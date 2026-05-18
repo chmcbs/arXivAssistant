@@ -77,7 +77,7 @@ async function checkSession() {
     digestApp.classList.add("hidden");
     return false;
   }
-  sessionLabel.textContent = "Signed in as " + session.email;
+  sessionLabel.textContent = session.email;
   authGate.classList.add("hidden");
   digestApp.classList.remove("hidden");
   return true;

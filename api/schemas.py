@@ -33,6 +33,7 @@ class ProfileFeedbackItem(BaseModel):
     arxiv_id: str
     title: str
     label: Literal["like", "dislike"]
+    created_at: datetime | None = None
 
 
 class ProfileSummary(BaseModel):

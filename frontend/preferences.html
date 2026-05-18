@@ -11,6 +11,7 @@
     <a class="brand" href="/">arXiv Assistant</a>
     <div class="row">
       <span id="session-label" class="muted">Checking session...</span>
+      <a class="link-btn" href="/preferences">Profiles</a>
       <a class="link-btn" href="/digest">Digest</a>
     </div>
   </header>
@@ -33,10 +34,9 @@
 
     <section id="prefs-app" class="hidden">
       <div class="section-header">
-        <h1>Your profiles</h1>
+        <h1>Profiles</h1>
         <button id="add-profile-btn">+ Add profile</button>
       </div>
-      <p class="muted">Use up to three profiles. Interest sentence is immutable after creation.</p>
       <p id="prefs-status" class="status muted"></p>
       <div id="profiles-grid" class="profiles-grid"></div>
     </section>
@@ -45,35 +45,41 @@
   <template id="profile-card-template">
     <article class="profile-card">
       <div class="row between">
-        <h2 class="profile-title"></h2>
-        <button class="danger delete-btn" type="button">Delete</button>
+        <div class="row profile-header-meta">
+          <input class="profile-title-input" type="text" maxlength="60" aria-label="Profile name">
+          <label class="checkbox-row active-toggle">
+            <input class="digest-checkbox" type="checkbox">
+            Active
+          </label>
+        </div>
+        <div class="row">
+          <button class="edit-btn" type="button">Edit profile</button>
+          <button class="danger delete-btn hidden" type="button">Delete</button>
+        </div>
       </div>
 
-      <label>Profile name</label>
-      <input class="profile-name-input" type="text" maxlength="60">
-
-      <label>Category</label>
+      <label class="category-label">Category</label>
       <select class="category-select"></select>
 
-      <label>Interest sentence (immutable)</label>
+      <label class="interest-label">Description</label>
       <textarea class="interest-text" rows="2" readonly></textarea>
 
-      <label class="checkbox-row">
-        <input class="digest-checkbox" type="checkbox">
-        Include this profile in the daily digest
-      </label>
-
-      <label>Add keyword</label>
-      <div class="row">
-        <input class="keyword-input" type="text" placeholder="e.g. retrieval">
-        <button class="keyword-add-btn" type="button">+keyword</button>
+      <div class="profile-summary">
+        <p class="summary-line summary-category"></p>
+        <p class="summary-line summary-description"></p>
       </div>
 
       <div class="keyword-list"></div>
-      <p class="tiny muted">Keyword rules: lowercase/trimmed, max 20 per profile, max 24 chars.</p>
 
-      <div class="row end">
-        <button class="save-btn" type="button">Save profile</button>
+      <p class="summary-line summary-feedback"></p>
+      <button class="feedback-toggle hidden" type="button">Feedback</button>
+      <div class="feedback-panel hidden">
+        <div class="feedback-list"></div>
+      </div>
+
+      <div class="row end card-actions">
+        <button class="save-btn hidden" type="button">Save profile</button>
+        <button class="cancel-edit-btn hidden" type="button">Cancel</button>
       </div>
     </article>
   </template>

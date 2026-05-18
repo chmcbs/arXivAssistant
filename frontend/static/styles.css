@@ -46,8 +46,8 @@ body {
 }
 
 .profiles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -59,6 +59,36 @@ body {
 
 .between { justify-content: space-between; }
 .end { justify-content: flex-end; }
+
+.profile-header-meta {
+  gap: 12px;
+}
+
+.profile-title-input {
+  font-size: 1.2rem;
+  font-weight: 700;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #111827;
+  min-width: 160px;
+}
+
+.profile-title-input:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.active-toggle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.active-toggle input[type="checkbox"] {
+  accent-color: #16a34a;
+  width: 16px;
+  height: 16px;
+}
 
 .section-header {
   display: flex;
@@ -95,13 +125,92 @@ button {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .checkbox-row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.field-value {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.profile-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-line {
+  margin: 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feedback-toggle {
+  align-self: flex-start;
+}
+
+.feedback-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.feedback-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.feedback-row-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.feedback-item-icon {
+  flex: 0 0 auto;
+}
+
+.feedback-item-text {
+  font-size: 13px;
+  color: #374151;
+}
+
+.feedback-group-title {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.feedback-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feedback-date {
+  font-size: 13px;
+  color: #6b7280;
+  white-space: nowrap;
 }
 
 .keyword-list {
@@ -119,6 +228,29 @@ button {
   border-radius: 999px;
   padding: 4px 8px;
   font-size: 12px;
+}
+
+.keyword-add-chip {
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  cursor: pointer;
+}
+
+.keyword-input-chip {
+  gap: 4px;
+  background: #dbeafe;
+}
+
+.keyword-inline-input {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  min-width: 120px;
+  font-size: 12px;
+}
+
+.keyword-inline-input:focus {
+  outline: none;
 }
 
 .chip-btn {

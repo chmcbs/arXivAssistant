@@ -52,7 +52,8 @@ SELECT
                 jsonb_build_object(
                     'arxiv_id', pf.arxiv_id,
                     'title', COALESCE(pap.title, pf.arxiv_id),
-                    'label', pf.label
+                    'label', pf.label,
+                    'created_at', pf.created_at
                 )
                 ORDER BY pf.created_at DESC, pf.arxiv_id ASC
             )
