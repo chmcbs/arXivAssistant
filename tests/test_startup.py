@@ -58,6 +58,24 @@ def test_validate_runtime_config_allows_valid_production_settings(monkeypatch):
     validate_runtime_config()
 
 
+def test_validate_runtime_config_rejects_dev_magic_link_in_production(monkeypatch):
+    _set_valid_production_env(monkeypatch)
+    monkeypatch.setenv("ALLOW_DEV_MAGIC_LINK_RESPONSE", "1")
+
+    with pytest.raises(StartupConfigError, match="ALLOW_DEV_MAGIC_LINK_RESPONSE"):
+        validate_runtime_config()
+
+
+def test_validate_runtime_config_rejects_disabled_rate_limit_in_production(
+    monkeypatch,
+):
+    _set_valid_production_env(monkeypatch)
+    monkeypatch.setenv("DISABLE_RATE_LIMIT", "1")
+
+    with pytest.raises(StartupConfigError, match="DISABLE_RATE_LIMIT"):
+        validate_runtime_config()
+
+
 def test_validate_runtime_config_requires_database_url_in_production(monkeypatch):
     _set_valid_production_env(monkeypatch)
     monkeypatch.delenv("DATABASE_URL", raising=False)

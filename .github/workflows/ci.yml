@@ -58,7 +58,18 @@ jobs:
         run: python -m compileall -q api core
 
       - name: Verify API application imports
-        run: python -c "from api.routes import app; assert app.title"
+        run: python -c "from api import app; assert app.title"
+
+      - name: Validate production startup configuration
+        run: |
+          APP_ENV=production \
+          DATABASE_URL=postgresql://postgres:postgres@db:5432/arxiv_assistant \
+          APP_BASE_URL=https://app.example.com \
+          INTERNAL_CRON_TOKEN=test-cron-token-thirty-two-characters-long \
+          SMTP_HOST=smtp.example.com \
+          EMAIL_FROM=noreply@example.com \
+          ALLOW_DEV_MAGIC_LINK_RESPONSE=0 \
+          python -c "from core.startup import validate_runtime_config; validate_runtime_config()"
 
       - name: Validate Docker Compose configuration
         run: |
@@ -68,17 +79,3 @@ jobs:
           SMTP_HOST=smtp.example.com \
           EMAIL_FROM=noreply@example.com \
           docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
-
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Deploy placeholder
-        run: |
-          echo "Deploy is not wired yet."
-          echo "Add Dockerfile + image publish (plan step 35), then host/cron deploy (plan step 40)."

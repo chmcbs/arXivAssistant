@@ -1,6 +1,6 @@
-arxiv
-fastapi
-psycopg[binary]
-python-dotenv
-sentence-transformers
-uvicorn
+arxiv==3.0.0
+fastapi==0.135.2
+psycopg[binary]==3.3.3
+python-dotenv==1.0.1
+sentence-transformers==5.4.1
+uvicorn==0.42.0
