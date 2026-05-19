@@ -116,3 +116,37 @@ def get_magic_link_verify_limit_per_ip() -> int:
 
 def get_rate_limit_window_seconds() -> int:
     return max(60, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600")))
+
+
+# Email
+def get_smtp_host() -> str:
+    return os.getenv("SMTP_HOST", "").strip()
+
+
+def get_smtp_port() -> int:
+    return max(1, int(os.getenv("SMTP_PORT", "587")))
+
+
+def get_smtp_username() -> str | None:
+    value = os.getenv("SMTP_USERNAME", "").strip()
+    return value or None
+
+
+def get_smtp_password() -> str | None:
+    value = os.getenv("SMTP_PASSWORD", "").strip()
+    return value or None
+
+
+def get_email_from() -> str:
+    return os.getenv("EMAIL_FROM", "").strip()
+
+
+def get_smtp_use_ssl() -> bool:
+    raw = os.getenv("SMTP_USE_SSL", "").strip()
+    if raw:
+        return _env_flag_enabled("SMTP_USE_SSL")
+    return get_smtp_port() == 465
+
+
+def is_email_delivery_configured() -> bool:
+    return bool(get_smtp_host() and get_email_from())

@@ -70,6 +70,7 @@ from core.config import (
 )
 from core.cron import run_daily_digest_for_all_users
 from core.db import get_database_url
+from core.email import EmailDeliveryError, send_magic_link_email
 from core.rate_limit import RateLimitExceeded, check_rate_limit
 from core.security import can_use_debug_features, verify_internal_cron_token
 from core.preferences import (
@@ -666,9 +667,12 @@ def request_magic_link_payload(
                 create_magic_link=lambda email: create_magic_link(
                     email=email, conn=active_uow.conn
                 ),
+                send_magic_link_email=send_magic_link_email,
                 app_base_url=get_app_base_url(),
                 expose_magic_link=is_dev_magic_link_response_enabled(),
             )
+    except EmailDeliveryError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     except ValueError as error:
         raise _to_http_exception(error) from error
 

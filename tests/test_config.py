@@ -73,3 +73,13 @@ def test_is_production_reads_app_env(monkeypatch):
 
     monkeypatch.setenv("APP_ENV", "development")
     assert config.is_production() is False
+
+
+def test_is_email_delivery_configured(monkeypatch):
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("EMAIL_FROM", raising=False)
+    assert config.is_email_delivery_configured() is False
+
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("EMAIL_FROM", "noreply@example.com")
+    assert config.is_email_delivery_configured() is True

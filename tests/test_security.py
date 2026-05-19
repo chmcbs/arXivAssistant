@@ -259,11 +259,19 @@ def test_magic_link_request_omits_link_without_dev_flag(monkeypatch, fake_api_uo
         "api.dependencies.create_magic_link",
         lambda email, conn=None: ("token-value", email.strip().lower()),
     )
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "api.dependencies.send_magic_link_email",
+        lambda to_email, magic_link: sent.append((to_email, magic_link)),
+    )
     client = TestClient(routes.app)
     response = client.post("/auth/magic-link/request", json={"email": "user@example.com"})
 
     assert response.status_code == 200
     assert response.json() == {"sent": True, "magic_link": None}
+    assert sent == [
+        ("user@example.com", "http://localhost:8000/auth/magic-link/verify?token=token-value")
+    ]
 
 
 def test_magic_link_request_is_rate_limited(monkeypatch, fake_api_uow):

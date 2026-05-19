@@ -6,7 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from api.services.auth import request_magic_link_payload
 from core import auth
+
+
+class _MagicLinkRequest:
+    def __init__(self, email: str) -> None:
+        self.email = email
 
 
 def _mock_connection_with_cursor(cursor):
@@ -96,3 +102,44 @@ def test_get_session_user_returns_tuple(monkeypatch):
     monkeypatch.setattr(auth.psycopg, "connect", _mock_connection_with_cursor(cursor))
 
     assert auth.get_session_user("session") == ("u@example.com", "u@example.com")
+
+
+def test_request_magic_link_payload_sends_email_when_dev_flag_disabled():
+    sent: list[tuple[str, str]] = []
+
+    payload = request_magic_link_payload(
+        _MagicLinkRequest("user@example.com"),
+        create_magic_link=lambda email: ("token-abc", email),
+        send_magic_link_email=lambda to_email, magic_link: sent.append(
+            (to_email, magic_link)
+        ),
+        app_base_url="https://app.example.com",
+        expose_magic_link=False,
+    )
+
+    assert payload == {"sent": True, "magic_link": None}
+    assert sent == [
+        (
+            "user@example.com",
+            "https://app.example.com/auth/magic-link/verify?token=token-abc",
+        )
+    ]
+
+
+def test_request_magic_link_payload_skips_email_when_dev_flag_enabled():
+    sent: list[tuple[str, str]] = []
+
+    payload = request_magic_link_payload(
+        _MagicLinkRequest("user@example.com"),
+        create_magic_link=lambda email: ("token-abc", email),
+        send_magic_link_email=lambda to_email, magic_link: sent.append(
+            (to_email, magic_link)
+        ),
+        app_base_url="https://app.example.com",
+        expose_magic_link=True,
+    )
+
+    assert payload["magic_link"] == (
+        "https://app.example.com/auth/magic-link/verify?token=token-abc"
+    )
+    assert sent == []

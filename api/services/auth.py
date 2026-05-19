@@ -8,17 +8,20 @@ from typing import Callable
 def request_magic_link_payload(
     request,
     create_magic_link: Callable[[str], tuple[str, str]],
+    send_magic_link_email: Callable[[str, str], None],
     app_base_url: str,
     *,
     expose_magic_link: bool,
 ) -> dict:
     token, _ = create_magic_link(request.email)
-    payload = {"sent": True, "magic_link": None}
+    magic_link = (
+        f"{app_base_url.rstrip('/')}/auth/magic-link/verify?token={token}"
+    )
     if expose_magic_link:
-        payload["magic_link"] = (
-            f"{app_base_url}/auth/magic-link/verify?token={token}"
-        )
-    return payload
+        return {"sent": True, "magic_link": magic_link}
+
+    send_magic_link_email(request.email, magic_link)
+    return {"sent": True, "magic_link": None}
 
 
 def verify_magic_link_payload(
