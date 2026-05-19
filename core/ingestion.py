@@ -71,6 +71,12 @@ SET status = 'failed',
 WHERE run_id = %s;
 """
 
+FETCH_RUN_CATEGORIES_SQL = """
+SELECT run_id::text, category
+FROM runs
+WHERE run_id::text = ANY(%s);
+"""
+
 
 def fetch_papers(
     category: str = "cs.AI",
@@ -184,6 +190,23 @@ def run_ingestion(
         run_ids.append(run_id)
 
     return run_ids
+
+
+def fetch_run_categories(run_ids: list[str], conn=None) -> dict[str, str]:
+    if not run_ids:
+        return {}
+
+    if conn is not None:
+        with conn.cursor() as cur:
+            cur.execute(FETCH_RUN_CATEGORIES_SQL, (run_ids,))
+            rows = cur.fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    with psycopg.connect(get_database_url()) as owned_conn:
+        with owned_conn.cursor() as cur:
+            cur.execute(FETCH_RUN_CATEGORIES_SQL, (run_ids,))
+            rows = cur.fetchall()
+    return {row[0]: row[1] for row in rows}
 
 
 if __name__ == "__main__":

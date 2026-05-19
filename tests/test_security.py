@@ -339,6 +339,43 @@ def test_magic_link_request_is_rate_limited(monkeypatch, fake_api_uow):
     assert second.status_code == 429
 
 
+def test_daily_picks_generate_is_rate_limited_per_user(monkeypatch, fake_api_uow):
+    from fastapi import HTTPException
+
+    import api.dependencies as dependencies
+    from api.schemas import GenerateDailyPicksRequest
+
+    monkeypatch.delenv("DISABLE_RATE_LIMIT", raising=False)
+    reset_rate_limits()
+    monkeypatch.setenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "1")
+    monkeypatch.setattr(
+        dependencies,
+        "generate_daily_picks_payload_service",
+        Mock(
+            return_value={
+                "user_id": "default",
+                "primary_profile_id": "profile-1",
+                "requested_profile_ids": ["profile-1"],
+                "run_ids": ["run-1"],
+                "embedded_count": 1,
+                "generation_runs": [],
+                "has_failures": False,
+                "needs_generation": False,
+                "picks": [],
+                "sections": [],
+            }
+        ),
+    )
+
+    request = GenerateDailyPicksRequest(profile_ids=["profile-1"])
+    dependencies.generate_daily_picks_payload(request, user_id="default")
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.generate_daily_picks_payload(request, user_id="default")
+
+    assert exc.value.status_code == 429
+
+
 def test_internal_cron_requires_bearer_token(monkeypatch):
     monkeypatch.setattr(
         routes,

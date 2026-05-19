@@ -60,6 +60,7 @@ from core.config import (
     DEFAULT_USER_ID,
     get_app_base_url,
     get_arxiv_categories,
+    get_daily_picks_generate_limit_per_user,
     get_magic_link_request_limit_per_email,
     get_magic_link_request_limit_per_ip,
     get_magic_link_verify_limit_per_ip,
@@ -166,6 +167,14 @@ def _enforce_magic_link_verify_limit(client_ip: str) -> None:
     check_rate_limit(
         f"magic-link-verify:ip:{client_ip}",
         max_attempts=get_magic_link_verify_limit_per_ip(),
+        window_seconds=get_rate_limit_window_seconds(),
+    )
+
+
+def _enforce_daily_picks_generate_limit(user_id: str) -> None:
+    check_rate_limit(
+        f"daily-picks-generate:user:{user_id.strip().lower()}",
+        max_attempts=get_daily_picks_generate_limit_per_user(),
         window_seconds=get_rate_limit_window_seconds(),
     )
 
@@ -292,6 +301,7 @@ def generate_daily_picks_payload(
     conn=None,
 ) -> dict:
     try:
+        _enforce_daily_picks_generate_limit(user_id)
         with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
 
             def run_pipeline_with_uow(**kwargs):

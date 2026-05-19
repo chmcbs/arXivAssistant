@@ -83,3 +83,22 @@ def test_is_email_delivery_configured(monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("EMAIL_FROM", "noreply@example.com")
     assert config.is_email_delivery_configured() is True
+
+
+def test_pipeline_limit_getters_use_environment(monkeypatch):
+    monkeypatch.setenv("INGESTION_MAX_RESULTS", "200")
+    monkeypatch.setenv("EMBEDDING_LIMIT", "900")
+    monkeypatch.setenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "7")
+
+    assert config.get_ingestion_max_results() == 200
+    assert config.get_embedding_limit() == 900
+    assert config.get_daily_picks_generate_limit_per_user() == 7
+
+
+def test_is_database_rate_limit_enabled_defaults_to_production(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_USE_DATABASE", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    assert config.is_database_rate_limit_enabled() is True
+
+    monkeypatch.setenv("APP_ENV", "development")
+    assert config.is_database_rate_limit_enabled() is False

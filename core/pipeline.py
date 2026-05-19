@@ -2,10 +2,15 @@
 Runs the end-to-end recommendation pipeline
 """
 
-from core.config import DEFAULT_USER_ID
+from core.config import (
+    DEFAULT_USER_ID,
+    get_embedding_limit,
+    get_ingestion_max_results,
+)
 from core.embeddings import run_embeddings
-from core.ingestion import run_ingestion
+from core.ingestion import fetch_run_categories, run_ingestion
 from core.logging import configure_logging, get_logger
+from core.profiles import get_profile
 from core.recommendations import generate_recommendations
 
 logger = get_logger(__name__)
@@ -35,22 +40,46 @@ def _normalize_profile_ids(
     return target_profile_ids
 
 
+def _matching_run_ids_for_profile(
+    *,
+    user_id: str,
+    profile_id: str,
+    run_ids: list[str],
+    run_categories: dict[str, str],
+) -> list[str]:
+    profile = get_profile(profile_id)
+    if profile is None or profile.user_id != user_id:
+        raise ValueError("profile not found for user")
+
+    return [
+        run_id
+        for run_id in run_ids
+        if run_categories.get(run_id) == profile.category
+    ]
+
+
 def run_shared_pipeline_steps(
     *,
-    max_results: int = 150,
-    embedding_limit: int = 600,
+    max_results: int | None = None,
+    embedding_limit: int | None = None,
 ) -> dict:
     configure_logging()
+    resolved_max_results = (
+        get_ingestion_max_results() if max_results is None else max_results
+    )
+    resolved_embedding_limit = (
+        get_embedding_limit() if embedding_limit is None else embedding_limit
+    )
 
     logger.info(
         "Running ingestion",
         extra={
             "event": "pipeline.step.started",
             "step": "ingestion",
-            "max_results": max_results,
+            "max_results": resolved_max_results,
         },
     )
-    run_ids = run_ingestion(max_results=max_results)
+    run_ids = run_ingestion(max_results=resolved_max_results)
     logger.info(
         "Ingestion finished",
         extra={
@@ -66,10 +95,10 @@ def run_shared_pipeline_steps(
         extra={
             "event": "pipeline.step.started",
             "step": "embeddings",
-            "embedding_limit": embedding_limit,
+            "embedding_limit": resolved_embedding_limit,
         },
     )
-    embedded_count = run_embeddings(limit=embedding_limit)
+    embedded_count = run_embeddings(limit=resolved_embedding_limit)
     logger.info(
         "Embeddings finished",
         extra={
@@ -92,6 +121,7 @@ def run_recommendations_for_profiles(
     run_ids: list[str],
 ) -> dict:
     target_profile_ids = _normalize_profile_ids(profile_id=None, profile_ids=profile_ids)
+    run_categories = fetch_run_categories(run_ids)
 
     logger.info(
         "Generating recommendations",
@@ -106,10 +136,29 @@ def run_recommendations_for_profiles(
 
     recommendations_by_run_profile: dict[str, dict[str, list[dict]]] = {}
     recommendation_status_by_run_profile: dict[str, dict[str, dict]] = {}
-    for run_id in run_ids:
-        recommendations_by_run_profile[run_id] = {}
-        recommendation_status_by_run_profile[run_id] = {}
-        for target_profile_id in target_profile_ids:
+    for target_profile_id in target_profile_ids:
+        matching_run_ids = _matching_run_ids_for_profile(
+            user_id=user_id,
+            profile_id=target_profile_id,
+            run_ids=run_ids,
+            run_categories=run_categories,
+        )
+        if not matching_run_ids:
+            logger.warning(
+                "No ingestion run matches profile category",
+                extra={
+                    "event": "pipeline.step.skipped",
+                    "step": "recommendations",
+                    "user_id": user_id,
+                    "profile_id": target_profile_id,
+                    "run_ids": run_ids,
+                },
+            )
+            continue
+
+        for run_id in matching_run_ids:
+            recommendations_by_run_profile.setdefault(run_id, {})
+            recommendation_status_by_run_profile.setdefault(run_id, {})
             try:
                 recommendations = generate_recommendations(
                     run_id,
@@ -162,8 +211,8 @@ def run_pipeline(
     user_id: str = DEFAULT_USER_ID,
     profile_id: str | None = None,
     profile_ids: list[str] | None = None,
-    max_results: int = 150,
-    embedding_limit: int = 600,
+    max_results: int | None = None,
+    embedding_limit: int | None = None,
 ) -> dict:
     target_profile_ids = _normalize_profile_ids(
         profile_id=profile_id,

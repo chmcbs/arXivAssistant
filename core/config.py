@@ -27,6 +27,14 @@ def get_arxiv_categories() -> list[str]:
     return categories
 
 
+def get_ingestion_max_results() -> int:
+    return max(1, int(os.getenv("INGESTION_MAX_RESULTS", "150")))
+
+
+def get_embedding_limit() -> int:
+    return max(1, int(os.getenv("EMBEDDING_LIMIT", "600")))
+
+
 # Recommendation
 def get_daily_picks_k() -> int:
     if DEFAULT_DAILY_K < 1:
@@ -116,6 +124,17 @@ def get_magic_link_verify_limit_per_ip() -> int:
 
 def get_rate_limit_window_seconds() -> int:
     return max(60, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600")))
+
+
+def get_daily_picks_generate_limit_per_user() -> int:
+    return max(1, int(os.getenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "5")))
+
+
+def is_database_rate_limit_enabled() -> bool:
+    raw = os.getenv("RATE_LIMIT_USE_DATABASE", "").strip()
+    if raw:
+        return _env_flag_enabled("RATE_LIMIT_USE_DATABASE")
+    return is_production()
 
 
 # Email

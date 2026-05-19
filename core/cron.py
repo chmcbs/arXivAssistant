@@ -8,6 +8,10 @@ import psycopg
 
 from core.db import get_database_url
 from core.logging import configure_logging, get_logger
+from core.config import (
+    get_embedding_limit,
+    get_ingestion_max_results,
+)
 from core.pipeline import run_recommendations_for_profiles, run_shared_pipeline_steps
 from core.profiles import list_digest_selected_profile_ids
 
@@ -41,11 +45,17 @@ def list_users_with_digest_selection(conn=None) -> list[str]:
 
 def run_daily_digest_for_all_users(
     *,
-    max_results: int = 150,
-    embedding_limit: int = 600,
+    max_results: int | None = None,
+    embedding_limit: int | None = None,
     conn=None,
 ) -> dict:
     configure_logging()
+    resolved_max_results = (
+        get_ingestion_max_results() if max_results is None else max_results
+    )
+    resolved_embedding_limit = (
+        get_embedding_limit() if embedding_limit is None else embedding_limit
+    )
     user_ids = list_users_with_digest_selection(conn=conn)
     results: list[dict] = []
     succeeded = 0
@@ -80,8 +90,8 @@ def run_daily_digest_for_all_users(
     if users_to_process:
         try:
             shared = run_shared_pipeline_steps(
-                max_results=max_results,
-                embedding_limit=embedding_limit,
+                max_results=resolved_max_results,
+                embedding_limit=resolved_embedding_limit,
             )
             shared_run_ids = shared["run_ids"]
         except Exception as error:

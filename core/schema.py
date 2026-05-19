@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 """
 
+CREATE_RATE_LIMIT_EVENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS rate_limit_events (
+    bucket_key TEXT NOT NULL,
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+CREATE_RATE_LIMIT_EVENTS_INDEX = """
+CREATE INDEX IF NOT EXISTS rate_limit_events_bucket_attempted_idx
+ON rate_limit_events (bucket_key, attempted_at DESC);
+"""
+
 
 ########################################
 ############# EMBEDDINGS ###############
@@ -232,6 +244,8 @@ def main():
             cur.execute(CREATE_VECTOR_EXTENSION)
             cur.execute(CREATE_PAPERS_TABLE)
             cur.execute(CREATE_RUNS_TABLE)
+            cur.execute(CREATE_RATE_LIMIT_EVENTS_TABLE)
+            cur.execute(CREATE_RATE_LIMIT_EVENTS_INDEX)
             cur.execute(CREATE_PAPER_EMBEDDINGS_TABLE)
             cur.execute(CREATE_PAPERS_KEYWORD_INDEX)
             cur.execute(CREATE_USER_PROFILES_TABLE)
