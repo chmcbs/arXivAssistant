@@ -2,8 +2,12 @@
 Runtime configuration validation at application startup
 """
 
+import os
+
 from core.config import (
+    get_app_base_url,
     get_internal_cron_token,
+    is_app_https,
     is_dev_magic_link_response_enabled,
     is_email_delivery_configured,
     is_production,
@@ -19,6 +23,21 @@ class StartupConfigError(RuntimeError):
 def validate_runtime_config() -> None:
     if not is_production():
         return
+
+    if not os.getenv("DATABASE_URL", "").strip():
+        raise StartupConfigError(
+            "DATABASE_URL must be set when APP_ENV is production"
+        )
+
+    if not get_app_base_url().strip():
+        raise StartupConfigError(
+            "APP_BASE_URL must be set when APP_ENV is production"
+        )
+
+    if not is_app_https():
+        raise StartupConfigError(
+            "APP_BASE_URL must use https when APP_ENV is production"
+        )
 
     if is_csrf_disabled():
         raise StartupConfigError(
