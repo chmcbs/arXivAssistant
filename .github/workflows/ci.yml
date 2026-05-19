@@ -72,10 +72,13 @@ jobs:
           python -c "from core.startup import validate_runtime_config; validate_runtime_config()"
 
       - name: Validate Docker Compose configuration
+        env:
+          INTERNAL_CRON_TOKEN: test-cron-token-thirty-two-characters-long
+          APP_BASE_URL: https://app.example.com
+          SMTP_HOST: smtp.example.com
+          EMAIL_FROM: noreply@example.com
         run: |
+          # .env is gitignored; compose still references it via env_file.
+          touch .env
           docker compose config --quiet
-          APP_BASE_URL=https://app.example.com \
-          INTERNAL_CRON_TOKEN=test-cron-token-thirty-two-characters-long \
-          SMTP_HOST=smtp.example.com \
-          EMAIL_FROM=noreply@example.com \
           docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
