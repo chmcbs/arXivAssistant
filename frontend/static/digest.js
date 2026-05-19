@@ -118,7 +118,7 @@ async function loadDigest() {
       /at least one profile must be selected for digest generation/i.test(msg)
     ) {
       setStatus(
-        "No profiles are enabled for the digest. Open Preferences, turn on “Include in digest” for at least one profile, save, then try again.",
+        "No profiles are enabled for the digest.",
         true,
       );
       renderSections([]);
