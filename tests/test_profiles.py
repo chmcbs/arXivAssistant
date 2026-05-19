@@ -95,8 +95,25 @@ def test_get_profile_returns_none_when_not_found(monkeypatch):
     assert profiles.get_profile("missing") is None
 
 
-def test_require_profile_id_returns_uuid_string():
+def test_require_profile_id_returns_uuid_string(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (1,)
+    monkeypatch.setattr(
+        profiles.psycopg, "connect", _mock_connection_with_cursor(cursor)
+    )
+
     assert profiles.require_profile_id(user_id="user-1", profile_id="p-99") == "p-99"
+
+
+def test_require_profile_id_rejects_foreign_profile(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+    monkeypatch.setattr(
+        profiles.psycopg, "connect", _mock_connection_with_cursor(cursor)
+    )
+
+    with pytest.raises(ValueError, match="profile not found for user"):
+        profiles.require_profile_id(user_id="user-1", profile_id="p-99")
 
 
 def test_require_profile_id_requires_value():

@@ -248,11 +248,11 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
 
     payload = generate_daily_picks_payload(
         GenerateDailyPicksRequest(
-            user_id="default",
             profile_ids=["profile-1", "profile-2"],
             max_results=123,
             embedding_limit=456,
         ),
+        user_id="default",
         get_arxiv_categories=Mock(return_value=["cs.AI"]),
         resolve_profile=Mock(
             side_effect=lambda user_id, profile_id: {"profile_id": profile_id}
@@ -303,11 +303,11 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
 def test_generate_daily_picks_allows_zero_recommendations_when_generation_succeeds():
     payload = generate_daily_picks_payload(
         GenerateDailyPicksRequest(
-            user_id="default",
             profile_ids=["profile-1"],
             max_results=123,
             embedding_limit=456,
         ),
+        user_id="default",
         get_arxiv_categories=Mock(return_value=["cs.AI"]),
         resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
         run_pipeline=Mock(
@@ -358,7 +358,8 @@ def test_generate_daily_picks_allows_zero_recommendations_when_generation_succee
 def test_generate_daily_picks_fails_when_all_targets_fail():
     with pytest.raises(InternalServerError) as error:
         generate_daily_picks_payload(
-            GenerateDailyPicksRequest(user_id="default", profile_ids=["profile-1"]),
+            GenerateDailyPicksRequest(profile_ids=["profile-1"]),
+            user_id="default",
             get_arxiv_categories=Mock(return_value=["cs.AI"]),
             resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
             run_pipeline=Mock(
@@ -395,6 +396,7 @@ def test_generate_daily_picks_rejects_multiple_categories():
     with pytest.raises(BadRequestError) as error:
         generate_daily_picks_payload(
             GenerateDailyPicksRequest(profile_ids=["profile-1"]),
+            user_id="default",
             get_arxiv_categories=Mock(return_value=["cs.AI", "cs.CL"]),
             resolve_profile=Mock(),
             run_pipeline=Mock(),
@@ -408,7 +410,7 @@ def test_generate_daily_picks_request_requires_profile_ids():
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        GenerateDailyPicksRequest(user_id="default", profile_ids=[])
+        GenerateDailyPicksRequest(profile_ids=[])
 
 
 def test_save_feedback_payload_updates_preferences():
@@ -416,11 +418,11 @@ def test_save_feedback_payload_updates_preferences():
     update_preference_embedding = Mock()
     payload = save_feedback_payload(
         FeedbackRequest(
-            user_id="default",
             profile_id="profile-1",
             arxiv_id="2601.00001",
             label="like",
         ),
+        user_id="default",
         resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
         save_feedback=save_feedback,
         update_preference_embedding=update_preference_embedding,
@@ -451,9 +453,9 @@ def test_add_profile_keyword_payload_maps_response():
     payload = add_profile_keyword_payload(
         profile_id="profile-1",
         request=ManageProfileKeywordRequest(
-            user_id="default",
             keyword="KV Cache",
         ),
+        user_id="default",
         add_profile_keyword=add_profile_keyword,
     )
 
@@ -474,9 +476,9 @@ def test_remove_profile_keyword_payload_maps_response():
     payload = remove_profile_keyword_payload(
         profile_id="profile-1",
         request=ManageProfileKeywordRequest(
-            user_id="default",
             keyword="KV Cache",
         ),
+        user_id="default",
         remove_profile_keyword=remove_profile_keyword,
     )
 
@@ -496,9 +498,9 @@ def test_update_digest_selection_payload_maps_response():
     set_digest_profile_selection = Mock(return_value=["profile-2", "profile-3"])
     payload = update_digest_selection_payload(
         UpdateDigestSelectionRequest(
-            user_id="default",
             profile_ids=["profile-2", "profile-3"],
         ),
+        user_id="default",
         set_digest_profile_selection=set_digest_profile_selection,
     )
 
@@ -661,7 +663,8 @@ def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(
 
     with pytest.raises(HTTPException) as error:
         dependencies.generate_daily_picks_payload(
-            GenerateDailyPicksRequest(user_id="default", profile_ids=["profile-1"])
+            GenerateDailyPicksRequest(profile_ids=["profile-1"]),
+            user_id="default",
         )
 
     assert error.value.status_code == 500

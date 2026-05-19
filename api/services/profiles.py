@@ -9,23 +9,24 @@ from api.mappers import to_profile_summary
 
 def create_profile_payload(
     request,
+    user_id: str,
     create_profile: Callable[..., str],
     initialize_preference_embedding: Callable[..., None],
     list_profiles_payload: Callable[[str], dict],
 ) -> dict:
     profile_id = create_profile(
-        user_id=request.user_id,
+        user_id=user_id,
         profile_name=request.profile_name,
         category=request.category,
         interest_sentence=request.interest_sentence,
     )
     initialize_preference_embedding(
         interest_text=request.interest_sentence,
-        user_id=request.user_id,
+        user_id=user_id,
         profile_id=profile_id,
     )
 
-    profiles = list_profiles_payload(request.user_id)["profiles"]
+    profiles = list_profiles_payload(user_id)["profiles"]
     created_profile = next((item for item in profiles if item["profile_id"] == profile_id), None)
     if created_profile is None:
         raise ValueError("created profile was not found")
@@ -44,14 +45,16 @@ def list_profiles_payload(
 
 
 def update_digest_selection_payload(
-    request, set_digest_profile_selection: Callable[..., list[str]]
+    request,
+    user_id: str,
+    set_digest_profile_selection: Callable[..., list[str]],
 ) -> dict:
     selected_profile_ids = set_digest_profile_selection(
         profile_ids=request.profile_ids,
-        user_id=request.user_id,
+        user_id=user_id,
     )
     return {
-        "user_id": request.user_id,
+        "user_id": user_id,
         "selected_profile_ids": selected_profile_ids,
     }
 
@@ -59,15 +62,16 @@ def update_digest_selection_payload(
 def add_profile_keyword_payload(
     profile_id: str,
     request,
+    user_id: str,
     add_profile_keyword: Callable[..., list[str]],
 ) -> dict:
     keywords = add_profile_keyword(
         profile_id=profile_id,
-        user_id=request.user_id,
+        user_id=user_id,
         keyword=request.keyword,
     )
     return {
-        "user_id": request.user_id,
+        "user_id": user_id,
         "profile_id": profile_id,
         "keywords": keywords,
     }
@@ -76,15 +80,16 @@ def add_profile_keyword_payload(
 def remove_profile_keyword_payload(
     profile_id: str,
     request,
+    user_id: str,
     remove_profile_keyword: Callable[..., list[str]],
 ) -> dict:
     keywords = remove_profile_keyword(
         profile_id=profile_id,
-        user_id=request.user_id,
+        user_id=user_id,
         keyword=request.keyword,
     )
     return {
-        "user_id": request.user_id,
+        "user_id": user_id,
         "profile_id": profile_id,
         "keywords": keywords,
     }
@@ -106,11 +111,12 @@ def list_profile_keywords_payload(
 def update_profile_payload(
     profile_id: str,
     request,
+    user_id: str,
     update_profile: Callable[..., object],
 ) -> dict:
     profile = update_profile(
         profile_id=profile_id,
-        user_id=request.user_id,
+        user_id=user_id,
         profile_name=request.profile_name,
         category=request.category,
         digest_enabled=request.digest_enabled,
@@ -120,12 +126,12 @@ def update_profile_payload(
 
 def delete_profile_payload(
     profile_id: str,
-    request,
+    user_id: str,
     delete_profile: Callable[..., bool],
 ) -> dict:
     deleted = delete_profile(
         profile_id=profile_id,
-        user_id=request.user_id,
+        user_id=user_id,
     )
     return {
         "profile_id": profile_id,

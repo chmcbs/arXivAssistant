@@ -20,7 +20,7 @@ def _mock_connection_with_cursor(cursor):
 
 def test_generate_recommendations_requires_completed_run(monkeypatch):
     cursor = MagicMock()
-    cursor.fetchone.return_value = None
+    cursor.fetchone.side_effect = [(1,), None]
     connect, _ = _mock_connection_with_cursor(cursor)
     monkeypatch.setattr(recommendations.psycopg, "connect", connect)
 
@@ -35,6 +35,7 @@ def test_generate_recommendations_requires_completed_run(monkeypatch):
 def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     cursor = MagicMock()
     cursor.fetchone.side_effect = [
+        (1,),
         ("run-123", "cs.AI", 150),
         (3,),
     ]
@@ -84,9 +85,9 @@ def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
     assert [result["rank"] for result in results] == [1, 2]
     assert [result["arxiv_id"] for result in results] == ["2601.00001", "2601.00002"]
     assert cursor.executemany.call_count == 1
-    assert cursor.execute.call_count == 4
+    assert cursor.execute.call_count == 5
 
-    delete_params = cursor.execute.call_args_list[3].args[1]
+    delete_params = cursor.execute.call_args_list[4].args[1]
     assert delete_params == ("run-123", "profile-1")
 
     inserted_rows = cursor.executemany.call_args.args[1]
@@ -102,7 +103,7 @@ def test_generate_recommendations_replaces_rows_deterministically(monkeypatch):
 
 def test_generate_recommendations_respects_k_override(monkeypatch):
     cursor = MagicMock()
-    cursor.fetchone.side_effect = [("run-123", "cs.AI", 150)]
+    cursor.fetchone.side_effect = [(1,), ("run-123", "cs.AI", 150)]
     cursor.fetchall.return_value = []
 
     connect, _ = _mock_connection_with_cursor(cursor)
@@ -119,7 +120,7 @@ def test_generate_recommendations_respects_k_override(monkeypatch):
         k_override=2,
     )
 
-    rank_params = cursor.execute.call_args_list[1].args[1]
+    rank_params = cursor.execute.call_args_list[2].args[1]
     assert rank_params == (
         "run-123",
         "profile-1",
@@ -134,7 +135,7 @@ def test_generate_recommendations_respects_k_override(monkeypatch):
 
 def test_generate_recommendations_rejects_invalid_override(monkeypatch):
     cursor = MagicMock()
-    cursor.fetchone.side_effect = [("run-123", "cs.AI", 150)]
+    cursor.fetchone.side_effect = [(1,), ("run-123", "cs.AI", 150)]
 
     connect, _ = _mock_connection_with_cursor(cursor)
     monkeypatch.setattr(recommendations.psycopg, "connect", connect)

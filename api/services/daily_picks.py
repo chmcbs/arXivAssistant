@@ -92,6 +92,7 @@ def get_debug_daily_picks_payload(
 
 def generate_daily_picks_payload(
     request,
+    user_id: str,
     get_arxiv_categories: Callable[[], list[str]],
     resolve_profile: Callable[[str, str | None], dict],
     run_pipeline: Callable[..., dict],
@@ -101,16 +102,16 @@ def generate_daily_picks_payload(
 
     target_profile_ids = list(dict.fromkeys(request.profile_ids))
     for target_profile_id in target_profile_ids:
-        resolve_profile(user_id=request.user_id, profile_id=target_profile_id)
+        resolve_profile(user_id=user_id, profile_id=target_profile_id)
 
     summary = run_pipeline(
-        user_id=request.user_id,
+        user_id=user_id,
         profile_ids=target_profile_ids,
         max_results=request.max_results,
         embedding_limit=request.embedding_limit,
     )
     picks_payload = get_daily_picks_payload(
-        user_id=request.user_id,
+        user_id=user_id,
         profile_id=None,
         run_ids=summary["run_ids"],
     )
@@ -166,7 +167,7 @@ def generate_daily_picks_payload(
         )
 
     return {
-        "user_id": request.user_id,
+        "user_id": user_id,
         "primary_profile_id": picks_payload["profile_id"],
         "requested_profile_ids": target_profile_ids,
         "run_ids": summary["run_ids"],

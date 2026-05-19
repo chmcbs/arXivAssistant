@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from core.config import DEFAULT_INTEREST_TEXT, DEFAULT_USER_ID, get_arxiv_categories
+from core.config import DEFAULT_INTEREST_TEXT, get_arxiv_categories
 
 
 class PublicPick(BaseModel):
@@ -71,7 +71,6 @@ class DebugDailyPicksResponse(BaseModel):
 
 
 class GenerateDailyPicksRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
     profile_ids: list[str] = Field(min_length=1)
     max_results: int = Field(default=150, ge=1)
     embedding_limit: int = Field(default=600, ge=1)
@@ -105,7 +104,6 @@ class GenerateDailyPicksResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     arxiv_id: str
     label: Literal["like", "dislike"]
-    user_id: str = DEFAULT_USER_ID
     profile_id: str
 
 
@@ -120,7 +118,6 @@ class FeedbackResponse(BaseModel):
 
 class RemoveFeedbackRequest(BaseModel):
     arxiv_id: str
-    user_id: str = DEFAULT_USER_ID
     profile_id: str
 
 
@@ -152,7 +149,6 @@ class FeedbackHubResponse(BaseModel):
 
 
 class CreateProfileRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
     profile_name: str = "Profile"
     category: str = Field(default_factory=lambda: get_arxiv_categories()[0])
     interest_sentence: str = DEFAULT_INTEREST_TEXT
@@ -168,7 +164,6 @@ class ListProfilesResponse(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
     profile_name: str | None = None
     category: str | None = None
     digest_enabled: bool | None = None
@@ -178,17 +173,12 @@ class UpdateProfileResponse(BaseModel):
     profile: ProfileSummary
 
 
-class DeleteProfileRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
-
-
 class DeleteProfileResponse(BaseModel):
     profile_id: str
     deleted: bool
 
 
 class ManageProfileKeywordRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
     keyword: str
 
 
@@ -199,7 +189,6 @@ class ManageProfileKeywordResponse(BaseModel):
 
 
 class UpdateDigestSelectionRequest(BaseModel):
-    user_id: str = DEFAULT_USER_ID
     profile_ids: list[str]
 
 
@@ -230,3 +219,19 @@ class DebugDigestDataResetResponse(BaseModel):
 
 class DebugProfileDataResetResponse(BaseModel):
     deleted_profiles: int
+
+
+class CronDailyDigestUserResult(BaseModel):
+    user_id: str
+    status: Literal["succeeded", "failed", "skipped"]
+    profile_ids: list[str]
+    run_ids: list[str] = Field(default_factory=list)
+    error_message: str | None = None
+
+
+class CronDailyDigestResponse(BaseModel):
+    users_seen: int
+    users_succeeded: int
+    users_failed: int
+    users_skipped: int
+    results: list[CronDailyDigestUserResult]

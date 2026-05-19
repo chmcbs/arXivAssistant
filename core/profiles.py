@@ -251,6 +251,13 @@ def require_profile_id(
 ) -> str:
     if not profile_id:
         raise ValueError("profile_id is required")
+
+    with _connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(CHECK_PROFILE_OWNERSHIP_SQL, (profile_id, user_id))
+            if cur.fetchone() is None:
+                raise ValueError("profile not found for user")
+
     return str(profile_id)
 
 

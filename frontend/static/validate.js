@@ -24,15 +24,13 @@ async function run(outId, action) {
 
 document.getElementById("profiles-btn").addEventListener("click", function () {
   run("profiles-out", async function () {
-    var userId = encodeURIComponent(document.getElementById("profiles-user-id").value.trim() || "default");
-    return apiRequest("/profiles?user_id=" + userId, "GET");
+    return apiRequest("/profiles", "GET");
   });
 });
 
 document.getElementById("create-btn").addEventListener("click", function () {
   run("create-out", async function () {
     return apiRequest("/profiles", "POST", {
-      user_id: document.getElementById("create-user-id").value.trim() || "default",
       category: document.getElementById("create-category").value.trim() || "cs.AI",
       interest_sentence: document.getElementById("create-interest-sentence").value.trim() || "Efficient LLM systems"
     });
@@ -41,7 +39,6 @@ document.getElementById("create-btn").addEventListener("click", function () {
 
 document.getElementById("digest-btn").addEventListener("click", function () {
   run("digest-out", async function () {
-    var userId = document.getElementById("digest-user-id").value.trim() || "default";
     var profileIds = document
       .getElementById("digest-profile-ids")
       .value
@@ -49,27 +46,25 @@ document.getElementById("digest-btn").addEventListener("click", function () {
       .map(function (value) { return value.trim(); })
       .filter(function (value) { return value.length > 0; });
     return apiRequest("/profiles/digest-selection", "PUT", {
-      user_id: userId,
       profile_ids: profileIds
     });
   });
 });
 
 function getKeywordInputs() {
-  var userId = document.getElementById("keyword-user-id").value.trim() || "default";
   var profileId = document.getElementById("keyword-profile-id").value.trim();
   var keyword = document.getElementById("keyword-value").value.trim();
   if (!profileId) {
     throw { status: 400, payload: { detail: "profile_id is required" } };
   }
-  return { userId: userId, profileId: profileId, keyword: keyword };
+  return { profileId: profileId, keyword: keyword };
 }
 
 document.getElementById("keywords-list-btn").addEventListener("click", function () {
   run("keywords-out", async function () {
     var inputs = getKeywordInputs();
     return apiRequest(
-      "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords?user_id=" + encodeURIComponent(inputs.userId),
+      "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords",
       "GET"
     );
   });
@@ -84,7 +79,7 @@ document.getElementById("keywords-add-btn").addEventListener("click", function (
     return apiRequest(
       "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords",
       "POST",
-      { user_id: inputs.userId, keyword: inputs.keyword }
+      { keyword: inputs.keyword }
     );
   });
 });
@@ -98,7 +93,7 @@ document.getElementById("keywords-remove-btn").addEventListener("click", functio
     return apiRequest(
       "/profiles/" + encodeURIComponent(inputs.profileId) + "/keywords",
       "DELETE",
-      { user_id: inputs.userId, keyword: inputs.keyword }
+      { keyword: inputs.keyword }
     );
   });
 });
@@ -114,7 +109,6 @@ document.getElementById("generate-btn").addEventListener("click", function () {
       throw { status: 400, payload: { detail: "profile_ids must contain at least one id" } };
     }
     var body = {
-      user_id: document.getElementById("generate-user-id").value.trim() || "default",
       profile_ids: profileIds,
       max_results: Number(document.getElementById("generate-max-results").value) || 150,
       embedding_limit: Number(document.getElementById("generate-embedding-limit").value) || 600
@@ -125,11 +119,10 @@ document.getElementById("generate-btn").addEventListener("click", function () {
 
 document.getElementById("daily-btn").addEventListener("click", function () {
   run("daily-out", async function () {
-    var userId = encodeURIComponent(document.getElementById("daily-user-id").value.trim() || "default");
     var profileId = optionalString(document.getElementById("daily-profile-id").value);
-    var query = "/daily-picks?user_id=" + userId;
+    var query = "/daily-picks";
     if (profileId) {
-      query += "&profile_id=" + encodeURIComponent(profileId);
+      query += "?profile_id=" + encodeURIComponent(profileId);
     }
     return apiRequest(query, "GET");
   });
@@ -137,16 +130,11 @@ document.getElementById("daily-btn").addEventListener("click", function () {
 
 document.getElementById("debug-btn").addEventListener("click", function () {
   run("debug-out", async function () {
-    var userId = encodeURIComponent(document.getElementById("debug-user-id").value.trim() || "default");
     var profileId = optionalString(document.getElementById("debug-profile-id").value);
     if (!profileId) {
       throw { status: 400, payload: { detail: "profile_id is required" } };
     }
-    var query =
-      "/daily-picks/debug?user_id=" +
-      userId +
-      "&profile_id=" +
-      encodeURIComponent(profileId);
+    var query = "/daily-picks/debug?profile_id=" + encodeURIComponent(profileId);
     return apiRequest(query, "GET");
   });
 });
@@ -160,7 +148,6 @@ document.getElementById("feedback-btn").addEventListener("click", function () {
     var body = {
       arxiv_id: document.getElementById("feedback-arxiv-id").value.trim(),
       label: document.getElementById("feedback-label").value,
-      user_id: document.getElementById("feedback-user-id").value.trim() || "default",
       profile_id: profileId,
     };
     return apiRequest("/api/feedback", "POST", body);

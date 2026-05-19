@@ -10,13 +10,12 @@
   <h1>Validation UI</h1>
   <p class="muted">
     Internal development surface for quickly validating API behavior and DB side effects.
+    Sign in first; requests use your session cookie (user_id is no longer accepted from clients).
   </p>
 
   <div class="validation-grid">
     <section class="validation-card">
       <h2>POST /profiles</h2>
-      <label for="create-user-id">user_id</label>
-      <input id="create-user-id" value="default">
       <label for="create-category">category</label>
       <input id="create-category" value="cs.AI">
       <label for="create-interest-sentence">interest_sentence</label>
@@ -27,16 +26,12 @@
 
     <section class="validation-card">
       <h2>GET /profiles</h2>
-      <label for="profiles-user-id">user_id</label>
-      <input id="profiles-user-id" value="default">
       <button id="profiles-btn">Load Profiles</button>
       <pre id="profiles-out">Click "Load Profiles".</pre>
     </section>
 
     <section class="validation-card">
       <h2>PUT /profiles/digest-selection</h2>
-      <label for="digest-user-id">user_id</label>
-      <input id="digest-user-id" value="default">
       <label for="digest-profile-ids">profile_ids (comma-separated)</label>
       <input id="digest-profile-ids" placeholder="profile-1,profile-2">
       <button id="digest-btn">Update Selection</button>
@@ -45,8 +40,6 @@
 
     <section class="validation-card">
       <h2>Profile Keywords</h2>
-      <label for="keyword-user-id">user_id</label>
-      <input id="keyword-user-id" value="default">
       <label for="keyword-profile-id">profile_id</label>
       <input id="keyword-profile-id" placeholder="profile-1">
       <label for="keyword-value">keyword</label>
@@ -59,8 +52,6 @@
 
     <section class="validation-card">
       <h2>POST /daily-picks/generate</h2>
-      <label for="generate-user-id">user_id</label>
-      <input id="generate-user-id" value="default">
       <label for="generate-profile-ids">profile_ids (comma-separated)</label>
       <input id="generate-profile-ids" placeholder="uuid-1, uuid-2">
       <label for="generate-max-results">max_results</label>
@@ -73,8 +64,6 @@
 
     <section class="validation-card">
       <h2>GET /daily-picks</h2>
-      <label for="daily-user-id">user_id</label>
-      <input id="daily-user-id" value="default">
       <label for="daily-profile-id">profile_id (optional)</label>
       <input id="daily-profile-id" placeholder="profile-1">
       <button id="daily-btn">Load Daily Picks</button>
@@ -83,8 +72,6 @@
 
     <section class="validation-card">
       <h2>GET /daily-picks/debug</h2>
-      <label for="debug-user-id">user_id</label>
-      <input id="debug-user-id" value="default">
       <label for="debug-profile-id">profile_id</label>
       <input id="debug-profile-id" placeholder="uuid from GET /profiles">
       <button id="debug-btn">Load Debug Picks</button>
@@ -93,8 +80,6 @@
 
     <section class="validation-card">
       <h2>POST /api/feedback</h2>
-      <label for="feedback-user-id">user_id</label>
-      <input id="feedback-user-id" value="default">
       <label for="feedback-profile-id">profile_id</label>
       <input id="feedback-profile-id" placeholder="uuid from GET /profiles">
       <label for="feedback-arxiv-id">arxiv_id</label>
