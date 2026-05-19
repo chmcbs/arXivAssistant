@@ -26,7 +26,7 @@ from api.dependencies import (
     request_magic_link_payload,
     remove_feedback_payload,
     require_authenticated_user_id,
-    require_debug_features_enabled,
+    require_debug_admin,
     require_internal_cron_token,
     run_daily_digest_cron_payload,
     save_feedback_payload,
@@ -125,8 +125,8 @@ def feedback_page() -> FileResponse:
 
 
 @app.get("/validate", response_class=FileResponse)
-def validate() -> FileResponse:
-    require_debug_features_enabled()
+def validate(request: Request) -> FileResponse:
+    require_debug_admin(request)
     return FileResponse(frontend_dir / "validate.html")
 
 
@@ -151,7 +151,7 @@ def auth_verify_magic_link(
     next: str = "/preferences",
 ) -> RedirectResponse:
     payload = verify_magic_link_payload(token=token, client_ip=_client_ip(request))
-    redirect_target = resolve_safe_redirect_path(next)
+    redirect_target = resolve_safe_redirect_path(next, email=payload["email"])
     response = RedirectResponse(url=redirect_target, status_code=302)
     _set_session_cookie(response, payload["session_id"])
     _set_csrf_cookie(response, token=generate_csrf_token())
@@ -186,7 +186,7 @@ def daily_picks_debug(
     request: Request,
     profile_id: str,
 ) -> dict:
-    require_debug_features_enabled()
+    require_debug_admin(request)
     user_id = require_authenticated_user_id(request)
     return get_debug_daily_picks_payload(
         user_id=user_id,

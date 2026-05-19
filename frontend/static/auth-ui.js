@@ -7,8 +7,15 @@ function setPageStatus(statusEl, message, isError) {
   statusEl.style.color = isError ? "#b91c1c" : "#6b7280";
 }
 
+function setDebugControlsVisible(canAccess) {
+  document.querySelectorAll("[data-debug-admin]").forEach(function (el) {
+    el.classList.toggle("hidden", !canAccess);
+  });
+}
+
 async function checkAuthenticatedSession({ sessionLabelEl, authGateEl, appEl }) {
   const session = await apiRequest("/auth/session", "GET");
+  setDebugControlsVisible(Boolean(session.can_debug_access));
   if (!session.authenticated) {
     sessionLabelEl.textContent = "Not signed in";
     authGateEl.classList.remove("hidden");
@@ -18,7 +25,7 @@ async function checkAuthenticatedSession({ sessionLabelEl, authGateEl, appEl }) 
   sessionLabelEl.textContent = session.email;
   authGateEl.classList.add("hidden");
   appEl.classList.remove("hidden");
-  return true;
+  return session;
 }
 
 function bindMagicLinkForm({ formEl, statusEl, linkWrapEl, linkEl, nextPath = "" }) {

@@ -51,3 +51,17 @@ def test_get_keyword_boost_cap_rejects_negative(monkeypatch):
     monkeypatch.setenv("KEYWORD_BOOST_CAP", "-0.1")
     with pytest.raises(ValueError, match="non-negative"):
         config.get_keyword_boost_cap()
+
+
+def test_get_debug_admin_emails_parses_comma_separated(monkeypatch):
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", " Admin@Example.com , dev@test.io ")
+
+    assert config.get_debug_admin_emails() == frozenset(
+        {"admin@example.com", "dev@test.io"}
+    )
+
+
+def test_get_debug_admin_emails_empty_when_unset(monkeypatch):
+    monkeypatch.delenv("DEBUG_ADMIN_EMAILS", raising=False)
+
+    assert config.get_debug_admin_emails() == frozenset()

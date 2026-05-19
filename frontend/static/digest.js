@@ -167,7 +167,7 @@ debugResetDbBtn.addEventListener("click", async () => {
   var ok = window.confirm(
     "Delete ALL papers, ingestion runs, recommendations, and feedback from the database?\n\n" +
       "Profiles, keywords, and profile preferences are kept.\n\n" +
-      "Requires ALLOW_DEBUG_DIGEST_DATA_RESET=1 on the server.",
+      "Admin-only debug reset. Requires DEBUG_ADMIN_EMAILS on the server.",
   );
   if (!ok) {
     return;

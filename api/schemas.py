@@ -210,6 +210,7 @@ class AuthSessionResponse(BaseModel):
     authenticated: bool
     user_id: str | None = None
     email: str | None = None
+    can_debug_access: bool = False
 
 
 class DebugDigestDataResetResponse(BaseModel):

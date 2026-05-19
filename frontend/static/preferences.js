@@ -591,7 +591,7 @@ debugResetProfilesBtn.addEventListener("click", async () => {
       "CASCADE removes profile_preferences, profile_keywords, paper_feedback, " +
       "and recommendations tied to those profiles.\n\n" +
       "Papers and runs are not removed; use Hard reset papers on the Digest page if you need a clean corpus.\n\n" +
-      "Requires ALLOW_DEBUG_DIGEST_DATA_RESET=1 on the server.",
+      "Admin-only debug reset. Requires DEBUG_ADMIN_EMAILS on the server.",
   );
   if (!ok) {
     return;

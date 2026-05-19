@@ -41,8 +41,9 @@
           <button
             id="debug-reset-profiles-btn"
             type="button"
-            class="danger"
-            title="Requires env ALLOW_DEBUG_DIGEST_DATA_RESET=1; deletes all profiles, preferences, and keywords (every user)"
+            class="danger hidden"
+            data-debug-admin
+            title="Admin only: requires ALLOW_DEBUG_FEATURES and DEBUG_ADMIN_EMAILS; deletes all profiles, preferences, and keywords"
           >
             Hard reset profiles (debug)
           </button>

@@ -127,6 +127,48 @@ def test_validate_route_hidden_when_debug_disabled(monkeypatch):
     assert response.status_code == 404
 
 
+def test_validate_route_requires_admin_email(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        "api.dependencies.get_auth_session_payload",
+        Mock(
+            return_value={
+                "authenticated": True,
+                "user_id": "other@example.com",
+                "email": "other@example.com",
+                "can_debug_access": False,
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+
+    response = client.get("/validate")
+
+    assert response.status_code == 403
+
+
+def test_daily_picks_debug_requires_admin_email(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        "api.dependencies.get_auth_session_payload",
+        Mock(
+            return_value={
+                "authenticated": True,
+                "user_id": "other@example.com",
+                "email": "other@example.com",
+                "can_debug_access": False,
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+
+    response = client.get("/daily-picks/debug?profile_id=profile-1")
+
+    assert response.status_code == 403
+
+
 def test_mutating_route_requires_csrf_when_enabled(monkeypatch):
     monkeypatch.delenv("DISABLE_CSRF", raising=False)
     client = TestClient(routes.app)
@@ -212,6 +254,87 @@ def test_internal_cron_requires_bearer_token(monkeypatch):
     assert allowed.status_code == 200
 
 
+def test_debug_reset_requires_admin_email(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        "api.dependencies.get_auth_session_payload",
+        Mock(
+            return_value={
+                "authenticated": True,
+                "user_id": "other@example.com",
+                "email": "other@example.com",
+                "can_debug_access": False,
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+    client.cookies.set("session_id", "session-123")
+    client.cookies.set("csrf_token", "csrf-abc")
+
+    response = client.post(
+        "/debug/profile-data/reset",
+        headers={"X-CSRF-Token": "csrf-abc"},
+    )
+
+    assert response.status_code == 403
+    assert "admin" in response.json()["detail"].lower()
+
+
+def test_debug_reset_allows_configured_admin(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        "api.dependencies.get_auth_session_payload",
+        Mock(
+            return_value={
+                "authenticated": True,
+                "user_id": "admin@example.com",
+                "email": "admin@example.com",
+                "can_debug_access": True,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "api.dependencies.reset_user_profiles",
+        Mock(return_value={"deleted_profiles": 2}),
+    )
+    client = TestClient(routes.app)
+    client.cookies.set("session_id", "session-123")
+    client.cookies.set("csrf_token", "csrf-abc")
+
+    response = client.post(
+        "/debug/profile-data/reset",
+        headers={"X-CSRF-Token": "csrf-abc"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["deleted_profiles"] == 2
+
+
+def test_auth_session_exposes_can_debug_access_for_admin(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        routes,
+        "get_auth_session_payload",
+        Mock(
+            return_value={
+                "authenticated": True,
+                "user_id": "admin@example.com",
+                "email": "admin@example.com",
+                "can_debug_access": True,
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+
+    response = client.get("/auth/session")
+
+    assert response.status_code == 200
+    assert response.json()["can_debug_access"] is True
+
+
 def test_security_headers_are_present(monkeypatch):
     monkeypatch.setattr(
         routes,
@@ -226,14 +349,17 @@ def test_security_headers_are_present(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "next_path,expected",
+    "next_path,email,expected",
     [
-        ("/digest", "/digest"),
-        ("//evil.example", "/preferences"),
-        ("/admin", "/preferences"),
-        ("/validate", "/validate"),
+        ("/digest", None, "/digest"),
+        ("//evil.example", None, "/preferences"),
+        ("/admin", None, "/preferences"),
+        ("/validate", "admin@example.com", "/validate"),
+        ("/validate", "other@example.com", "/preferences"),
+        ("/validate", None, "/preferences"),
     ],
 )
-def test_resolve_safe_redirect_path(next_path, expected, monkeypatch):
+def test_resolve_safe_redirect_path(next_path, email, expected, monkeypatch):
     monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
-    assert resolve_safe_redirect_path(next_path) == expected
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    assert resolve_safe_redirect_path(next_path, email=email) == expected

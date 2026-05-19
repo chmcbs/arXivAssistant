@@ -25,6 +25,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/arxiv_assistant
       INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-dev-cron-token}
+      DEBUG_ADMIN_EMAILS: ${DEBUG_ADMIN_EMAILS:-}
     depends_on:
       db:
         condition: service_healthy

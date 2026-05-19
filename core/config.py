@@ -65,6 +65,13 @@ def is_debug_features_enabled() -> bool:
     return is_debug_digest_data_reset_enabled()
 
 
+def get_debug_admin_emails() -> frozenset[str]:
+    raw = os.getenv("DEBUG_ADMIN_EMAILS", "")
+    return frozenset(
+        email.strip().lower() for email in raw.split(",") if email.strip()
+    )
+
+
 # Auth rate limits
 def get_magic_link_request_limit_per_email() -> int:
     return max(1, int(os.getenv("MAGIC_LINK_REQUEST_LIMIT_PER_EMAIL", "3")))

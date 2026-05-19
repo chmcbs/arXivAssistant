@@ -4,7 +4,7 @@ Shared security helpers for redirects, CSRF, and internal service authentication
 
 import secrets
 
-from core.config import is_debug_features_enabled, is_app_https
+from core.config import get_debug_admin_emails, is_debug_features_enabled, is_app_https
 
 CSRF_COOKIE_NAME = "csrf_token"
 CSRF_HEADER_NAME = "x-csrf-token"
@@ -25,7 +25,7 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def resolve_safe_redirect_path(next_path: str) -> str:
+def resolve_safe_redirect_path(next_path: str, *, email: str | None = None) -> str:
     normalized = (next_path or "/preferences").strip()
     if not normalized.startswith("/") or normalized.startswith("//"):
         return "/preferences"
@@ -33,7 +33,7 @@ def resolve_safe_redirect_path(next_path: str) -> str:
     path_only = normalized.split("?", 1)[0].split("#", 1)[0]
     if path_only in PUBLIC_MAGIC_LINK_REDIRECTS:
         return path_only
-    if path_only in DEBUG_MAGIC_LINK_REDIRECTS and is_debug_features_enabled():
+    if path_only in DEBUG_MAGIC_LINK_REDIRECTS and can_use_debug_features(email):
         return path_only
     return "/preferences"
 
@@ -72,6 +72,21 @@ def get_internal_cron_token() -> str | None:
 
     token = os.getenv("INTERNAL_CRON_TOKEN", "").strip()
     return token or None
+
+
+def is_debug_admin_email(email: str | None) -> bool:
+    if not email:
+        return False
+    admins = get_debug_admin_emails()
+    if not admins:
+        return False
+    return email.strip().lower() in admins
+
+
+def can_use_debug_features(email: str | None) -> bool:
+    if not is_debug_features_enabled():
+        return False
+    return is_debug_admin_email(email)
 
 
 def verify_internal_cron_token(provided_token: str | None) -> bool:

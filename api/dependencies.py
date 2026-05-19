@@ -59,13 +59,12 @@ from core.config import (
     get_magic_link_request_limit_per_ip,
     get_magic_link_verify_limit_per_ip,
     get_rate_limit_window_seconds,
-    is_debug_digest_data_reset_enabled,
     is_debug_features_enabled,
 )
 from core.cron import run_daily_digest_for_all_users
 from core.db import get_database_url
 from core.rate_limit import RateLimitExceeded, check_rate_limit
-from core.security import verify_internal_cron_token
+from core.security import can_use_debug_features, verify_internal_cron_token
 from core.preferences import (
     initialize_preference_embedding,
     remove_feedback,
@@ -109,9 +108,22 @@ def require_internal_cron_token(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Invalid internal cron token")
 
 
-def require_debug_features_enabled() -> None:
+def _require_debug_admin_session(session: dict) -> None:
+    if not session["authenticated"]:
+        raise HTTPException(status_code=401, detail="Sign in required")
     if not is_debug_features_enabled():
         raise HTTPException(status_code=404, detail="Not found")
+    if not can_use_debug_features(session.get("email")):
+        raise HTTPException(
+            status_code=403,
+            detail="Debug access is restricted to configured admin emails",
+        )
+
+
+def require_debug_admin(request: Request) -> str:
+    session = get_auth_session_payload(request.cookies.get("session_id"))
+    _require_debug_admin_session(session)
+    return str(session["email"])
 
 
 def _client_ip(request: Request) -> str:
@@ -301,16 +313,7 @@ def generate_daily_picks_payload(
 
 def debug_reset_digest_data_payload(session_id: str | None) -> dict:
     session = get_auth_session_payload(session_id)
-    if not session["authenticated"]:
-        raise HTTPException(status_code=401, detail="Sign in required")
-    if not is_debug_features_enabled():
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Debug data reset is disabled. "
-                "Set ALLOW_DEBUG_FEATURES=1 or ALLOW_DEBUG_DIGEST_DATA_RESET=1."
-            ),
-        )
+    _require_debug_admin_session(session)
     with open_api_unit_of_work() as uow:
         return reset_papers_and_runs(uow.conn)
 
@@ -527,16 +530,7 @@ def update_digest_selection_payload(
 
 def debug_reset_profile_data_payload(session_id: str | None) -> dict:
     session = get_auth_session_payload(session_id)
-    if not session["authenticated"]:
-        raise HTTPException(status_code=401, detail="Sign in required")
-    if not is_debug_features_enabled():
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Debug data reset is disabled. "
-                "Set ALLOW_DEBUG_FEATURES=1 or ALLOW_DEBUG_DIGEST_DATA_RESET=1."
-            ),
-        )
+    _require_debug_admin_session(session)
     with open_api_unit_of_work() as uow:
         return reset_user_profiles(uow.conn)
 
@@ -691,9 +685,19 @@ def get_auth_session_payload(
     with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
         resolved = get_session_user(session_id=session_id or "", conn=active_uow.conn)
     if resolved is None:
-        return {"authenticated": False, "user_id": None, "email": None}
+        return {
+            "authenticated": False,
+            "user_id": None,
+            "email": None,
+            "can_debug_access": False,
+        }
     user_id, email = resolved
-    return {"authenticated": True, "user_id": user_id, "email": email}
+    return {
+        "authenticated": True,
+        "user_id": user_id,
+        "email": email,
+        "can_debug_access": can_use_debug_features(email),
+    }
 
 
 def run_daily_digest_cron_payload() -> dict:
