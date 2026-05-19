@@ -8,7 +8,7 @@ import psycopg
 
 from core.db import get_database_url
 from core.logging import configure_logging, get_logger
-from core.pipeline import run_pipeline
+from core.pipeline import run_recommendations_for_profiles, run_shared_pipeline_steps
 from core.profiles import list_digest_selected_profile_ids
 
 logger = get_logger(__name__)
@@ -51,6 +51,7 @@ def run_daily_digest_for_all_users(
     succeeded = 0
     failed = 0
     skipped = 0
+    users_to_process: list[tuple[str, list[str]]] = []
 
     logger.info(
         "Daily digest cron started",
@@ -73,13 +74,55 @@ def run_daily_digest_for_all_users(
                 }
             )
             continue
+        users_to_process.append((user_id, profile_ids))
 
+    shared_run_ids: list[str] = []
+    if users_to_process:
         try:
-            summary = run_pipeline(
-                user_id=user_id,
-                profile_ids=profile_ids,
+            shared = run_shared_pipeline_steps(
                 max_results=max_results,
                 embedding_limit=embedding_limit,
+            )
+            shared_run_ids = shared["run_ids"]
+        except Exception as error:
+            message = str(error).strip() or error.__class__.__name__
+            logger.exception(
+                "Daily digest cron failed during shared pipeline steps",
+                extra={"event": "cron.daily_digest.shared_failed"},
+            )
+            for user_id, profile_ids in users_to_process:
+                failed += 1
+                results.append(
+                    {
+                        "user_id": user_id,
+                        "status": "failed",
+                        "profile_ids": profile_ids,
+                        "run_ids": [],
+                        "error_message": message,
+                    }
+                )
+            payload = {
+                "users_seen": len(user_ids),
+                "users_succeeded": succeeded,
+                "users_failed": failed,
+                "users_skipped": skipped,
+                "results": results,
+            }
+            logger.info(
+                "Daily digest cron finished",
+                extra={
+                    "event": "cron.daily_digest.completed",
+                    **{key: payload[key] for key in payload if key != "results"},
+                },
+            )
+            return payload
+
+    for user_id, profile_ids in users_to_process:
+        try:
+            run_recommendations_for_profiles(
+                user_id=user_id,
+                profile_ids=profile_ids,
+                run_ids=shared_run_ids,
             )
             succeeded += 1
             results.append(
@@ -87,7 +130,7 @@ def run_daily_digest_for_all_users(
                     "user_id": user_id,
                     "status": "succeeded",
                     "profile_ids": profile_ids,
-                    "run_ids": summary.get("run_ids", []),
+                    "run_ids": shared_run_ids,
                     "error_message": None,
                 }
             )
@@ -107,6 +150,7 @@ def run_daily_digest_for_all_users(
                     "user_id": user_id,
                     "status": "failed",
                     "profile_ids": profile_ids,
+                    "run_ids": shared_run_ids,
                     "error_message": message,
                 }
             )

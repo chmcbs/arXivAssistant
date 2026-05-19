@@ -16,13 +16,10 @@ def _stringify_error(error: Exception) -> str:
     return text or error.__class__.__name__
 
 
-def run_pipeline(
-    user_id: str = DEFAULT_USER_ID,
-    profile_id: str | None = None,
-    profile_ids: list[str] | None = None,
-    max_results: int = 150,
-    embedding_limit: int = 600,
-) -> dict:
+def _normalize_profile_ids(
+    profile_id: str | None,
+    profile_ids: list[str] | None,
+) -> list[str]:
     if profile_id is not None and profile_ids is not None:
         raise ValueError("provide either profile_id or profile_ids, not both")
 
@@ -35,18 +32,15 @@ def run_pipeline(
     else:
         raise ValueError("provide either profile_id or profile_ids")
 
-    configure_logging()
+    return target_profile_ids
 
-    logger.info(
-        "Pipeline started",
-        extra={
-            "event": "pipeline.started",
-            "user_id": user_id,
-            "profile_ids": target_profile_ids,
-            "max_results": max_results,
-            "embedding_limit": embedding_limit,
-        },
-    )
+
+def run_shared_pipeline_steps(
+    *,
+    max_results: int = 150,
+    embedding_limit: int = 600,
+) -> dict:
+    configure_logging()
 
     logger.info(
         "Running ingestion",
@@ -85,10 +79,31 @@ def run_pipeline(
         },
     )
 
+    return {
+        "run_ids": run_ids,
+        "embedded_count": embedded_count,
+    }
+
+
+def run_recommendations_for_profiles(
+    *,
+    user_id: str,
+    profile_ids: list[str],
+    run_ids: list[str],
+) -> dict:
+    target_profile_ids = _normalize_profile_ids(profile_id=None, profile_ids=profile_ids)
+
     logger.info(
         "Generating recommendations",
-        extra={"event": "pipeline.step.started", "step": "recommendations"},
+        extra={
+            "event": "pipeline.step.started",
+            "step": "recommendations",
+            "user_id": user_id,
+            "profile_ids": target_profile_ids,
+            "run_ids": run_ids,
+        },
     )
+
     recommendations_by_run_profile: dict[str, dict[str, list[dict]]] = {}
     recommendation_status_by_run_profile: dict[str, dict[str, dict]] = {}
     for run_id in run_ids:
@@ -137,20 +152,60 @@ def run_pipeline(
                     },
                 )
 
+    return {
+        "recommendations_by_run_profile": recommendations_by_run_profile,
+        "recommendation_status_by_run_profile": recommendation_status_by_run_profile,
+    }
+
+
+def run_pipeline(
+    user_id: str = DEFAULT_USER_ID,
+    profile_id: str | None = None,
+    profile_ids: list[str] | None = None,
+    max_results: int = 150,
+    embedding_limit: int = 600,
+) -> dict:
+    target_profile_ids = _normalize_profile_ids(
+        profile_id=profile_id,
+        profile_ids=profile_ids,
+    )
+
+    configure_logging()
+
+    logger.info(
+        "Pipeline started",
+        extra={
+            "event": "pipeline.started",
+            "user_id": user_id,
+            "profile_ids": target_profile_ids,
+            "max_results": max_results,
+            "embedding_limit": embedding_limit,
+        },
+    )
+
+    shared = run_shared_pipeline_steps(
+        max_results=max_results,
+        embedding_limit=embedding_limit,
+    )
+    recommendations = run_recommendations_for_profiles(
+        user_id=user_id,
+        profile_ids=target_profile_ids,
+        run_ids=shared["run_ids"],
+    )
+
     logger.info(
         "Pipeline finished",
         extra={
             "event": "pipeline.completed",
-            "run_ids": run_ids,
-            "embedded_count": embedded_count,
+            "run_ids": shared["run_ids"],
+            "embedded_count": shared["embedded_count"],
         },
     )
 
     return {
-        "run_ids": run_ids,
-        "embedded_count": embedded_count,
-        "recommendations_by_run_profile": recommendations_by_run_profile,
-        "recommendation_status_by_run_profile": recommendation_status_by_run_profile,
+        "run_ids": shared["run_ids"],
+        "embedded_count": shared["embedded_count"],
+        **recommendations,
     }
 
 
