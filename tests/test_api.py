@@ -39,6 +39,7 @@ def _pick_row(rank=1):
         arxiv_id=f"2601.0000{rank}",
         title=f"Paper {rank}",
         abstract=f"Abstract {rank}",
+        description=f"Uses method {rank} to improve benchmark performance under realistic workloads.",
         pdf_url=f"https://arxiv.org/pdf/2601.0000{rank}",
         run_id="run-123",
         category="cs.AI",
@@ -108,6 +109,7 @@ def test_get_daily_picks_returns_public_fields():
             "arxiv_id": "2601.00001",
             "title": "Paper 1",
             "abstract": "Abstract 1",
+            "description": "Uses method 1 to improve benchmark performance under realistic workloads.",
             "pdf_url": "https://arxiv.org/pdf/2601.00001",
             "final_score": 0.9,
         }

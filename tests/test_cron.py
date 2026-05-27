@@ -50,13 +50,20 @@ def test_run_daily_digest_for_all_users_runs_shared_steps_once(monkeypatch):
     )
     run_shared = Mock(return_value={"run_ids": ["run-shared"], "embedded_count": 3})
     run_recommendations = Mock()
+    description_batch = Mock(return_value={"succeeded": 1})
+    monkeypatch.setattr(cron, "list_digest_categories", Mock(return_value=["cs.AI"]))
     monkeypatch.setattr(cron, "run_shared_pipeline_steps", run_shared)
     monkeypatch.setattr(cron, "run_recommendations_for_profiles", run_recommendations)
+    monkeypatch.setattr(cron, "run_description_batch_for_recommendations", description_batch)
 
     payload = cron.run_daily_digest_for_all_users()
 
     assert payload["users_succeeded"] == 2
-    run_shared.assert_called_once_with(max_results=150, embedding_limit=600)
+    run_shared.assert_called_once_with(
+        categories=["cs.AI"],
+        max_results=150,
+        embedding_limit=600,
+    )
     assert run_recommendations.call_count == 2
     run_recommendations.assert_any_call(
         user_id="user-1",
@@ -70,6 +77,10 @@ def test_run_daily_digest_for_all_users_runs_shared_steps_once(monkeypatch):
     )
     assert payload["results"][0]["run_ids"] == ["run-shared"]
     assert payload["results"][1]["run_ids"] == ["run-shared"]
+    description_batch.assert_called_once_with(
+        run_ids=["run-shared"],
+        conn=None,
+    )
 
 
 def test_run_daily_digest_for_all_users_marks_users_failed_when_shared_steps_fail(

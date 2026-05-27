@@ -238,6 +238,44 @@ ON recommendations (profile_id, arxiv_id, generated_at DESC);
 """
 
 
+########################################
+############# DESCRIPTIONS #############
+########################################
+
+CREATE_DESCRIPTION_BATCHES_TABLE = """
+CREATE TABLE IF NOT EXISTS description_batches (
+    batch_id UUID PRIMARY KEY,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    attempted INTEGER NOT NULL DEFAULT 0,
+    succeeded INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
+    skipped_budget INTEGER NOT NULL DEFAULT 0,
+    skipped_timeout INTEGER NOT NULL DEFAULT 0,
+    skipped_validation INTEGER NOT NULL DEFAULT 0,
+    total_input_tokens INTEGER NOT NULL DEFAULT 0,
+    total_output_tokens INTEGER NOT NULL DEFAULT 0,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL
+);
+"""
+
+CREATE_DESCRIPTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS descriptions (
+    arxiv_id TEXT PRIMARY KEY REFERENCES papers(arxiv_id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES description_batches(batch_id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('llm')),
+    model TEXT NOT NULL,
+    prompt_version INTEGER NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+
 def main():
     with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
@@ -265,6 +303,8 @@ def main():
             cur.execute(ALTER_RECOMMENDATIONS_ADD_KEYWORD_BOOST)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_GENERATED_INDEX)
             cur.execute(CREATE_RECOMMENDATIONS_PROFILE_PAPER_GENERATED_INDEX)
+            cur.execute(CREATE_DESCRIPTION_BATCHES_TABLE)
+            cur.execute(CREATE_DESCRIPTIONS_TABLE)
 
 
 if __name__ == "__main__":

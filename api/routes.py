@@ -16,6 +16,7 @@ from api.dependencies import (
     debug_reset_profile_data_payload,
     delete_profile_payload,
     generate_daily_picks_payload,
+    get_generate_daily_picks_progress_payload,
     get_auth_session_payload,
     get_daily_picks_payload,
     get_debug_daily_picks_payload,
@@ -53,6 +54,7 @@ from api.schemas import (
     RemoveFeedbackRequest,
     RemoveFeedbackResponse,
     GenerateDailyPicksRequest,
+    GenerateDailyPicksProgressResponse,
     GenerateDailyPicksResponse,
     ListProfilesResponse,
     ManageProfileKeywordRequest,
@@ -259,6 +261,15 @@ def daily_picks_debug(
         user_id=user_id,
         profile_id=profile_id,
     )
+
+
+@app.get(
+    "/daily-picks/generate/progress",
+    response_model=GenerateDailyPicksProgressResponse,
+)
+def daily_picks_generate_progress(request: Request) -> dict:
+    user_id = require_authenticated_user_id(request)
+    return get_generate_daily_picks_progress_payload(user_id)
 
 
 @app.post("/daily-picks/generate", response_model=GenerateDailyPicksResponse)

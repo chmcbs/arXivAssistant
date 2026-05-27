@@ -138,6 +138,13 @@ WHERE user_id = %s
   AND profile_id = ANY(%s::uuid[]);
 """
 
+LIST_DIGEST_CATEGORIES_SQL = """
+SELECT DISTINCT category
+FROM user_profiles
+WHERE digest_enabled = TRUE
+ORDER BY category ASC;
+"""
+
 
 def _validate_interest_sentence(interest_sentence: str) -> str:
     value = interest_sentence.strip()
@@ -317,6 +324,29 @@ def remove_profile_keyword(
             rows = cur.fetchall()
 
     return [row[0] for row in rows]
+
+
+def list_digest_categories(conn=None) -> list[str]:
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(LIST_DIGEST_CATEGORIES_SQL)
+            rows = cur.fetchall()
+    return [row[0] for row in rows]
+
+
+def categories_for_profile_ids(
+    user_id: str,
+    profile_ids: list[str],
+    *,
+    conn=None,
+) -> list[str]:
+    categories: list[str] = []
+    for profile_id in profile_ids:
+        profile = get_profile(profile_id, conn=conn)
+        if profile is None or profile.user_id != user_id:
+            raise ValueError("profile not found for user")
+        categories.append(profile.category)
+    return list(dict.fromkeys(categories))
 
 
 def list_digest_selected_profile_ids(

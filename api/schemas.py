@@ -15,6 +15,7 @@ class PublicPick(BaseModel):
     arxiv_id: str
     title: str
     abstract: str
+    description: str | None = None
     pdf_url: str | None
     final_score: float
 
@@ -86,6 +87,14 @@ class GenerationProfileStatus(BaseModel):
 class GenerationRunStatus(BaseModel):
     run_id: str
     profile_statuses: list[GenerationProfileStatus]
+
+
+class GenerateDailyPicksProgressResponse(BaseModel):
+    active: bool
+    step: str | None = None
+    label: str | None = None
+    detail: str | None = None
+    updated_at: datetime | None = None
 
 
 class GenerateDailyPicksResponse(BaseModel):

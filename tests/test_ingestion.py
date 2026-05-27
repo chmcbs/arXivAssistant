@@ -31,7 +31,10 @@ def test_run_ingestion_completes_run(monkeypatch):
 
     assert run_ids == ["run-123"]
     ingestion.start_run.assert_called_once_with("cs.AI", 10)
-    ingestion.fetch_papers.assert_called_once_with(category="cs.AI", max_results=10)
+    ingestion.fetch_papers.assert_called_once()
+    assert ingestion.fetch_papers.call_args.kwargs["category"] == "cs.AI"
+    assert ingestion.fetch_papers.call_args.kwargs["max_results"] == 10
+    assert ingestion.fetch_papers.call_args.kwargs["client"] is not None
     ingestion.save_papers.assert_called_once_with(papers)
     ingestion.complete_run.assert_called_once_with("run-123", 2, 2)
     ingestion.fail_run.assert_not_called()

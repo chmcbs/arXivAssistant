@@ -1,0 +1,605 @@
+"""
+Paper-level LLM blurbs for digest picks
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import time
+import uuid
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Protocol
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+
+from core.config import (
+    get_llm_abstract_max_chars,
+    get_llm_base_url,
+    get_llm_batch_concurrency,
+    get_llm_batch_timeout_s,
+    get_llm_model,
+    get_llm_prompt_version,
+    get_llm_provider_name,
+    get_llm_request_timeout_s,
+)
+from core.db import connection_scope
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+_WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+
+FETCH_CANDIDATES_SQL = """
+SELECT
+    p.arxiv_id,
+    p.title,
+    COALESCE(p.abstract, '') AS abstract,
+    MAX(rec.final_score) AS max_score
+FROM recommendations rec
+JOIN papers p ON p.arxiv_id = rec.arxiv_id
+LEFT JOIN descriptions d ON d.arxiv_id = rec.arxiv_id
+WHERE rec.run_id::text = ANY(%(run_ids)s)
+  AND (
+    %(profile_ids)s::text[] IS NULL
+    OR rec.profile_id::text = ANY(%(profile_ids)s::text[])
+  )
+  AND d.arxiv_id IS NULL
+GROUP BY p.arxiv_id, p.title, p.abstract
+ORDER BY max_score DESC, p.arxiv_id ASC;
+"""
+
+INSERT_BATCH_START_SQL = """
+INSERT INTO description_batches (
+    batch_id,
+    started_at,
+    finished_at,
+    attempted,
+    succeeded,
+    failed,
+    skipped_budget,
+    skipped_timeout,
+    skipped_validation,
+    total_input_tokens,
+    total_output_tokens,
+    provider,
+    model
+)
+VALUES (
+    %(batch_id)s,
+    %(started_at)s,
+    NULL,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    %(provider)s,
+    %(model)s
+);
+"""
+
+UPDATE_BATCH_SQL = """
+UPDATE description_batches
+SET
+    finished_at = %(finished_at)s,
+    attempted = %(attempted)s,
+    succeeded = %(succeeded)s,
+    failed = %(failed)s,
+    skipped_budget = %(skipped_budget)s,
+    skipped_timeout = %(skipped_timeout)s,
+    skipped_validation = %(skipped_validation)s,
+    total_input_tokens = %(total_input_tokens)s,
+    total_output_tokens = %(total_output_tokens)s
+WHERE batch_id = %(batch_id)s;
+"""
+
+INSERT_DESCRIPTION_SQL = """
+INSERT INTO descriptions (
+    arxiv_id,
+    batch_id,
+    description,
+    source,
+    model,
+    prompt_version,
+    input_tokens,
+    output_tokens,
+    latency_ms
+)
+VALUES (
+    %(arxiv_id)s,
+    %(batch_id)s,
+    %(description)s,
+    'llm',
+    %(model)s,
+    %(prompt_version)s,
+    %(input_tokens)s,
+    %(output_tokens)s,
+    %(latency_ms)s
+)
+ON CONFLICT (arxiv_id) DO NOTHING;
+"""
+
+
+@dataclass(frozen=True)
+class PaperCandidate:
+    arxiv_id: str
+    title: str
+    abstract: str
+    max_score: float
+
+
+@dataclass(frozen=True)
+class LLMResult:
+    text: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+
+
+@dataclass(frozen=True)
+class PaperOutcome:
+    arxiv_id: str
+    status: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+
+
+class LLMProvider(Protocol):
+    provider_name: str
+    model_name: str
+
+    def generate(self, prompt: str, *, timeout_s: float) -> LLMResult: ...
+
+
+# Shorten long abstracts before they go into the prompt
+def _truncate_abstract(abstract: str, max_chars: int) -> str:
+    text = abstract.strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3].rstrip() + "..."
+
+
+def _normalize_words(text: str) -> list[str]:
+    return [word.lower() for word in _WORD_RE.findall(text) if len(word) > 2]
+
+
+# Checks whether a description repeats the title of the paper
+def repeats_title(title: str, description: str) -> bool:
+    title_text = title.strip().lower()
+    description_text = description.strip().lower()
+    if not description_text:
+        return True
+    if description_text in title_text or title_text in description_text:
+        return True
+
+    title_words = set(_normalize_words(title))
+    description_words = _normalize_words(description)
+    if not description_words:
+        return True
+
+    overlap = sum(1 for word in description_words if word in title_words)
+    return (overlap / len(description_words)) > 0.55
+
+
+def _build_prompt(*, title: str, abstract: str, retry: bool) -> str:
+    truncated = _truncate_abstract(abstract, get_llm_abstract_max_chars())
+    retry_note = ""
+    if retry:
+        retry_note = (
+            "\nIMPORTANT: Your previous answer repeated the title. "
+            "Write a new sentence that adds different information from the "
+            "abstract without repeating phrases from the title.\n"
+        )
+    return (
+        "You write one-sentence research paper summaries for a daily digest email.\n"
+        f"{retry_note}\n"
+        f"Title: {title.strip()}\n\n"
+        f"Abstract:\n{truncated}\n\n"
+        "Write exactly one sentence (max 35 words) that compresses the abstract "
+        "into useful context for a reader who already read the title. Do NOT "
+        "repeat or restate the title's main claim. Add the next most useful "
+        "detail from the abstract (method, setting, result, limitation, etc.).\n\n"
+        "Rules:\n"
+        "- Neutral, factual tone\n"
+        "- Do not start with \"This paper\"\n"
+        "- No hype or superlatives\n"
+        "- Do not include facts not supported by the abstract\n"
+        "- Output only the sentence, no quotes or labels\n"
+    )
+
+
+def _clean_sentence(text: str) -> str:
+    cleaned = text.strip().strip("\"'")
+    return re.sub(r"\s+", " ", cleaned)
+
+
+def _is_valid_description(description: str) -> bool:
+    return bool(description) and len(description.split()) <= 50
+
+
+class OllamaProvider:
+    provider_name = "ollama"
+
+    def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+        self.base_url = (base_url or get_llm_base_url()).rstrip("/")
+        self.model_name = model or get_llm_model()
+
+    # Parse the JSON response into an LLMResult
+    def generate(self, prompt: str, *, timeout_s: float) -> LLMResult:
+        payload = json.dumps(
+            {
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"num_predict": 80, "temperature": 0.2},
+            }
+        ).encode("utf-8")
+        request = urllib_request.Request(
+            f"{self.base_url}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        started = time.monotonic()
+        try:
+            with urllib_request.urlopen(request, timeout=timeout_s) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib_error.URLError as error:
+            raise RuntimeError(f"Ollama request failed: {error}") from error
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return LLMResult(
+            text=_clean_sentence(str(body.get("response", ""))),
+            input_tokens=int(body.get("prompt_eval_count") or 0),
+            output_tokens=int(body.get("eval_count") or 0),
+            latency_ms=latency_ms,
+        )
+
+
+class MockLLMProvider:
+    provider_name = "mock"
+    model_name = "mock-model"
+
+    def __init__(self, *, response_text: str | None = None) -> None:
+        self.response_text = response_text or (
+            "Uses a controlled benchmark to quantify scaling limits under realistic workloads."
+        )
+
+    def generate(self, prompt: str, *, timeout_s: float) -> LLMResult:
+        del prompt, timeout_s
+        return LLMResult(
+            text=self.response_text,
+            input_tokens=120,
+            output_tokens=24,
+            latency_ms=5,
+        )
+
+
+def get_llm_provider(provider_name: str | None = None) -> LLMProvider:
+    resolved = (provider_name or get_llm_provider_name()).strip().lower()
+    if resolved == "mock":
+        return MockLLMProvider()
+    if resolved == "ollama":
+        return OllamaProvider()
+    raise ValueError(f"Unsupported LLM provider: {resolved}")
+
+
+# Returns a list of papers sorted by highest final_score to determine batch priority order
+def fetch_paper_candidates(
+    *,
+    run_ids: list[str],
+    profile_ids: list[str] | None = None,
+    conn=None,
+) -> list[PaperCandidate]:
+    if not run_ids:
+        return []
+
+    normalized_run_ids = list(dict.fromkeys(run_ids))
+    normalized_profile_ids = (
+        list(dict.fromkeys(profile_ids)) if profile_ids is not None else None
+    )
+
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(
+                FETCH_CANDIDATES_SQL,
+                {
+                    "run_ids": normalized_run_ids,
+                    "profile_ids": normalized_profile_ids,
+                },
+            )
+            rows = cur.fetchall()
+
+    return [
+        PaperCandidate(
+            arxiv_id=row[0],
+            title=row[1],
+            abstract=row[2],
+            max_score=float(row[3]),
+        )
+        for row in rows
+    ]
+
+
+def _persist_description(
+    *,
+    paper: PaperCandidate,
+    description: str,
+    batch_id: str,
+    provider: LLMProvider,
+    outcome: PaperOutcome,
+    conn=None,
+) -> bool:
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(
+                INSERT_DESCRIPTION_SQL,
+                {
+                    "arxiv_id": paper.arxiv_id,
+                    "batch_id": batch_id,
+                    "description": description,
+                    "model": provider.model_name,
+                    "prompt_version": get_llm_prompt_version(),
+                    "input_tokens": outcome.input_tokens,
+                    "output_tokens": outcome.output_tokens,
+                    "latency_ms": outcome.latency_ms,
+                },
+            )
+            inserted = cur.rowcount == 1
+        active_conn.commit()
+    return inserted
+
+
+# Process one paper end-to-end (this runs inside a thread during the batch)
+def _process_paper(
+    paper: PaperCandidate,
+    provider: LLMProvider,
+    *,
+    batch_id: str,
+    request_timeout_s: float,
+) -> PaperOutcome:
+    started = time.monotonic()
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_latency_ms = 0
+
+    for retry in (False, True):
+        remaining = request_timeout_s - (time.monotonic() - started)
+        if remaining <= 0:
+            return PaperOutcome(
+                arxiv_id=paper.arxiv_id,
+                status="skipped_timeout",
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+                latency_ms=total_latency_ms,
+            )
+
+        prompt = _build_prompt(title=paper.title, abstract=paper.abstract, retry=retry)
+        try:
+            result = provider.generate(prompt, timeout_s=remaining)
+        except Exception as error:
+            logger.warning(
+                "LLM call failed for paper",
+                extra={
+                    "event": "llm.paper.failed",
+                    "arxiv_id": paper.arxiv_id,
+                    "retry": retry,
+                    "error_type": error.__class__.__name__,
+                },
+            )
+            if retry:
+                return PaperOutcome(
+                    arxiv_id=paper.arxiv_id,
+                    status="failed",
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    latency_ms=total_latency_ms,
+                )
+            continue
+
+        total_input_tokens += result.input_tokens
+        total_output_tokens += result.output_tokens
+        total_latency_ms += result.latency_ms
+        description = _clean_sentence(result.text)
+
+        if not _is_valid_description(description) or repeats_title(paper.title, description):
+            if retry:
+                return PaperOutcome(
+                    arxiv_id=paper.arxiv_id,
+                    status="skipped_validation",
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    latency_ms=total_latency_ms,
+                )
+            continue
+
+        outcome = PaperOutcome(
+            arxiv_id=paper.arxiv_id,
+            status="succeeded",
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            latency_ms=total_latency_ms,
+        )
+        _persist_description(
+            paper=paper,
+            description=description,
+            batch_id=batch_id,
+            provider=provider,
+            outcome=outcome,
+        )
+        return outcome
+
+    return PaperOutcome(
+        arxiv_id=paper.arxiv_id,
+        status="skipped_validation",
+        input_tokens=total_input_tokens,
+        output_tokens=total_output_tokens,
+        latency_ms=total_latency_ms,
+    )
+
+
+# Top-level function called by core/cron.py and core/pipeline.py
+def run_description_batch_for_recommendations(
+    *,
+    run_ids: list[str],
+    profile_ids: list[str] | None = None,
+    provider: LLMProvider | None = None,
+    conn=None,
+) -> dict:
+    batch_started = datetime.now(UTC)
+    batch_started_monotonic = time.monotonic()
+    batch_id = str(uuid.uuid4())
+    candidates = fetch_paper_candidates(
+        run_ids=run_ids,
+        profile_ids=profile_ids,
+        conn=conn,
+    )
+
+    stats = {
+        "batch_id": batch_id,
+        "candidate_count": len(candidates),
+        "attempted": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "skipped_budget": 0,
+        "skipped_timeout": 0,
+        "skipped_validation": 0,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+    }
+
+    if not candidates:
+        logger.info(
+            "LLM description batch skipped — no candidates",
+            extra={"event": "llm.batch.completed", "batch_id": batch_id},
+        )
+        return stats
+
+    resolved_provider = provider or get_llm_provider()
+    concurrency = get_llm_batch_concurrency()
+    batch_timeout_s = get_llm_batch_timeout_s()
+    request_timeout_s = get_llm_request_timeout_s()
+
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(
+                INSERT_BATCH_START_SQL,
+                {
+                    "batch_id": batch_id,
+                    "started_at": batch_started,
+                    "provider": resolved_provider.provider_name,
+                    "model": resolved_provider.model_name,
+                },
+            )
+        active_conn.commit()
+
+    logger.info(
+        "LLM description batch started",
+        extra={
+            "event": "llm.batch.started",
+            "batch_id": batch_id,
+            "candidate_count": len(candidates),
+            "provider": resolved_provider.provider_name,
+            "model": resolved_provider.model_name,
+        },
+    )
+
+    pending = list(candidates)
+    active: dict[Future[PaperOutcome], PaperCandidate] = {}
+
+    def _record_outcome(outcome: PaperOutcome) -> None:
+        stats["attempted"] += 1
+        stats["total_input_tokens"] += outcome.input_tokens
+        stats["total_output_tokens"] += outcome.output_tokens
+        if outcome.status == "succeeded":
+            stats["succeeded"] += 1
+        elif outcome.status == "failed":
+            stats["failed"] += 1
+        elif outcome.status == "skipped_timeout":
+            stats["skipped_timeout"] += 1
+        elif outcome.status == "skipped_validation":
+            stats["skipped_validation"] += 1
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        while pending or active:
+            if (time.monotonic() - batch_started_monotonic) >= batch_timeout_s:
+                stats["skipped_budget"] += len(pending) + len(active)
+                for future in active:
+                    future.cancel()
+                break
+
+            while pending and len(active) < concurrency:
+                if (time.monotonic() - batch_started_monotonic) >= batch_timeout_s:
+                    stats["skipped_budget"] += len(pending)
+                    pending = []
+                    break
+                paper = pending.pop(0)
+                future = executor.submit(
+                    _process_paper,
+                    paper,
+                    resolved_provider,
+                    batch_id=batch_id,
+                    request_timeout_s=request_timeout_s,
+                )
+                active[future] = paper
+
+            if not active:
+                break
+
+            done, _not_done = wait(active, timeout=0.25, return_when=FIRST_COMPLETED)
+            if not done:
+                continue
+
+            for future in done:
+                paper = active.pop(future)
+                try:
+                    outcome = future.result()
+                except Exception as error:
+                    logger.exception(
+                        "Unexpected LLM worker failure",
+                        extra={
+                            "event": "llm.paper.failed",
+                            "arxiv_id": paper.arxiv_id,
+                            "error_type": error.__class__.__name__,
+                        },
+                    )
+                    outcome = PaperOutcome(arxiv_id=paper.arxiv_id, status="failed")
+                _record_outcome(outcome)
+
+    finished_at = datetime.now(UTC)
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(
+                UPDATE_BATCH_SQL,
+                {
+                    "batch_id": batch_id,
+                    "finished_at": finished_at,
+                    "attempted": stats["attempted"],
+                    "succeeded": stats["succeeded"],
+                    "failed": stats["failed"],
+                    "skipped_budget": stats["skipped_budget"],
+                    "skipped_timeout": stats["skipped_timeout"],
+                    "skipped_validation": stats["skipped_validation"],
+                    "total_input_tokens": stats["total_input_tokens"],
+                    "total_output_tokens": stats["total_output_tokens"],
+                },
+            )
+        active_conn.commit()
+
+    logger.info(
+        "LLM description batch completed",
+        extra={
+            "event": "llm.batch.completed",
+            **stats,
+            "provider": resolved_provider.provider_name,
+            "model": resolved_provider.model_name,
+            "duration_ms": int((time.monotonic() - batch_started_monotonic) * 1000),
+        },
+    )
+    return stats

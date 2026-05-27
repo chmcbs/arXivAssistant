@@ -10,7 +10,9 @@ from core.config import (
 from core.embeddings import run_embeddings
 from core.ingestion import fetch_run_categories, run_ingestion
 from core.logging import configure_logging, get_logger
-from core.profiles import get_profile
+from core.descriptions import run_description_batch_for_recommendations
+from core.pipeline_progress import set_step
+from core.profiles import categories_for_profile_ids, get_profile
 from core.recommendations import generate_recommendations
 
 logger = get_logger(__name__)
@@ -60,6 +62,7 @@ def _matching_run_ids_for_profile(
 
 def run_shared_pipeline_steps(
     *,
+    categories: list[str] | None = None,
     max_results: int | None = None,
     embedding_limit: int | None = None,
 ) -> dict:
@@ -71,6 +74,7 @@ def run_shared_pipeline_steps(
         get_embedding_limit() if embedding_limit is None else embedding_limit
     )
 
+    set_step("ingestion")
     logger.info(
         "Running ingestion",
         extra={
@@ -79,7 +83,10 @@ def run_shared_pipeline_steps(
             "max_results": resolved_max_results,
         },
     )
-    run_ids = run_ingestion(max_results=resolved_max_results)
+    run_ids = run_ingestion(
+        categories=categories,
+        max_results=resolved_max_results,
+    )
     logger.info(
         "Ingestion finished",
         extra={
@@ -90,6 +97,7 @@ def run_shared_pipeline_steps(
         },
     )
 
+    set_step("embeddings")
     logger.info(
         "Generating embeddings",
         extra={
@@ -99,6 +107,7 @@ def run_shared_pipeline_steps(
         },
     )
     embedded_count = run_embeddings(limit=resolved_embedding_limit)
+    set_step("embeddings", detail=f"Embedded {embedded_count} paper(s)")
     logger.info(
         "Embeddings finished",
         extra={
@@ -123,6 +132,7 @@ def run_recommendations_for_profiles(
     target_profile_ids = _normalize_profile_ids(profile_id=None, profile_ids=profile_ids)
     run_categories = fetch_run_categories(run_ids)
 
+    set_step("recommendations")
     logger.info(
         "Generating recommendations",
         extra={
@@ -232,7 +242,13 @@ def run_pipeline(
         },
     )
 
+    ingest_categories = categories_for_profile_ids(
+        user_id=user_id,
+        profile_ids=target_profile_ids,
+    )
+
     shared = run_shared_pipeline_steps(
+        categories=ingest_categories,
         max_results=max_results,
         embedding_limit=embedding_limit,
     )
@@ -242,18 +258,32 @@ def run_pipeline(
         run_ids=shared["run_ids"],
     )
 
+    set_step("descriptions")
+    description_batch = run_description_batch_for_recommendations(
+        run_ids=shared["run_ids"],
+        profile_ids=target_profile_ids,
+    )
+    succeeded = description_batch.get("succeeded", 0)
+    if succeeded:
+        set_step(
+            "descriptions",
+            detail=f"Wrote {succeeded} summary sentence(s)",
+        )
+
     logger.info(
         "Pipeline finished",
         extra={
             "event": "pipeline.completed",
             "run_ids": shared["run_ids"],
             "embedded_count": shared["embedded_count"],
+            "description_batch": description_batch,
         },
     )
 
     return {
         "run_ids": shared["run_ids"],
         "embedded_count": shared["embedded_count"],
+        "description_batch": description_batch,
         **recommendations,
     }
 

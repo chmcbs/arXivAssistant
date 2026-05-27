@@ -112,6 +112,26 @@ def test_pipeline_limit_getters_use_environment(monkeypatch):
     assert config.get_daily_picks_generate_limit_per_user() == 7
 
 
+def test_llm_config_getters_use_environment(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("LLM_BASE_URL", "http://example:11434")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BATCH_CONCURRENCY", "5")
+    monkeypatch.setenv("LLM_BATCH_TIMEOUT_S", "90")
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "12")
+    monkeypatch.setenv("LLM_PROMPT_VERSION", "2")
+    monkeypatch.setenv("LLM_ABSTRACT_MAX_CHARS", "2000")
+
+    assert config.get_llm_provider_name() == "mock"
+    assert config.get_llm_base_url() == "http://example:11434"
+    assert config.get_llm_model() == "test-model"
+    assert config.get_llm_batch_concurrency() == 5
+    assert config.get_llm_batch_timeout_s() == 90
+    assert config.get_llm_request_timeout_s() == 12
+    assert config.get_llm_prompt_version() == 2
+    assert config.get_llm_abstract_max_chars() == 2000
+
+
 def test_is_database_rate_limit_enabled_defaults_to_production(monkeypatch):
     monkeypatch.delenv("RATE_LIMIT_USE_DATABASE", raising=False)
     monkeypatch.setenv("APP_ENV", "production")

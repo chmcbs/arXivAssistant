@@ -11,6 +11,7 @@ import psycopg
 from core.config import get_arxiv_categories
 from core.db import get_database_url
 from core.logging import get_logger
+from core.pipeline_progress import set_step
 
 logger = get_logger(__name__)
 
@@ -83,8 +84,10 @@ def fetch_papers(
     max_results: int = 150,
     sort_by: arxiv.SortCriterion = arxiv.SortCriterion.SubmittedDate,
     sort_order: arxiv.SortOrder = arxiv.SortOrder.Descending,
+    *,
+    client: arxiv.Client | None = None,
 ):
-    client = arxiv.Client()
+    resolved_client = client or arxiv.Client(delay_seconds=3.0, num_retries=5)
     search = arxiv.Search(
         query=f"cat:{category}",
         max_results=max_results,
@@ -92,20 +95,14 @@ def fetch_papers(
         sort_order=sort_order,
     )
 
-    return list(client.results(search))
+    return list(resolved_client.results(search))
 
 
 def clean_id(arxiv_id: str) -> str:
-    """
-    Convert IDs so different versions update to the same paper row
-    """
     return re.sub(r"v\d+$", "", arxiv_id)
 
 
 def save_papers(papers: list[arxiv.Result]) -> int:
-    """
-    Insert or update papers by canonical arXiv ID
-    """
     rows = [
         {
             "arxiv_id": clean_id(paper.get_short_id()),
@@ -155,12 +152,22 @@ def run_ingestion(
         categories = get_arxiv_categories()
 
     run_ids = []
+    total_categories = len(categories)
+    client = arxiv.Client(delay_seconds=3.0, num_retries=5)
 
-    for category in categories:
+    for index, category in enumerate(categories):
+        set_step(
+            "ingestion",
+            detail=f"{index + 1}/{total_categories}: {category}…",
+        )
         run_id = start_run(category, max_results)
 
         try:
-            papers = fetch_papers(category=category, max_results=max_results)
+            papers = fetch_papers(
+                category=category,
+                max_results=max_results,
+                client=client,
+            )
             saved_count = save_papers(papers)
             complete_run(run_id, len(papers), saved_count)
             logger.info(

@@ -68,6 +68,7 @@ from core.config import (
     is_trust_proxy_headers_enabled,
 )
 from core.cron import run_daily_digest_for_all_users
+from core.pipeline_progress import get_progress, set_step, track_pipeline
 from core.db import get_database_url
 from core.email import EmailDeliveryError, send_magic_link_email
 from core.rate_limit import RateLimitExceeded, check_rate_limit
@@ -292,6 +293,10 @@ def get_debug_daily_picks_payload(
         raise _to_http_exception(error) from error
 
 
+def get_generate_daily_picks_progress_payload(user_id: str) -> dict:
+    return get_progress(user_id).as_dict()
+
+
 def generate_daily_picks_payload(
     request: GenerateDailyPicksRequest,
     user_id: str,
@@ -307,7 +312,9 @@ def generate_daily_picks_payload(
                 # Pipeline opens separate DB connections and may execute DDL that
                 # otherwise blocks on locks held by this connection.
                 active_uow.conn.commit()
-                summary = _run_pipeline(**kwargs)
+                with track_pipeline(user_id):
+                    summary = _run_pipeline(**kwargs)
+                    set_step("finishing")
                 active_uow.set_generated_run_ids(summary.get("run_ids", []))
                 return summary
 

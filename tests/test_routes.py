@@ -45,6 +45,33 @@ def test_feedback_hub_route_returns_sections(monkeypatch):
     assert body["liked"] == []
 
 
+def test_daily_picks_generate_progress_route_returns_snapshot(monkeypatch):
+    monkeypatch.setattr(
+        routes,
+        "get_generate_daily_picks_progress_payload",
+        Mock(
+            return_value={
+                "active": True,
+                "step": "embeddings",
+                "label": "Generating embeddings…",
+                "detail": "Embedded 12 paper(s)",
+                "updated_at": "2026-05-27T12:00:00+00:00",
+            }
+        ),
+    )
+
+    client = TestClient(routes.app)
+    response = client.get("/daily-picks/generate/progress")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["active"] is True
+    assert body["step"] == "embeddings"
+    assert body["label"] == "Generating embeddings…"
+    assert body["detail"] == "Embedded 12 paper(s)"
+    assert body["updated_at"].startswith("2026-05-27T12:00:00")
+
+
 def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypatch):
     monkeypatch.setattr(
         routes,

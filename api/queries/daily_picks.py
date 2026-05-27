@@ -22,6 +22,7 @@ SELECT
     p.arxiv_id,
     p.title,
     COALESCE(p.abstract, '') AS abstract,
+    d.description,
     p.pdf_url,
     rec.run_id::text,
     r.category,
@@ -36,6 +37,7 @@ JOIN recommendations rec
   ON rec.run_id = lr.run_id
  AND rec.profile_id = %s
 JOIN papers p ON p.arxiv_id = rec.arxiv_id
+LEFT JOIN descriptions d ON d.arxiv_id = p.arxiv_id
 JOIN runs r ON r.run_id = rec.run_id
 ORDER BY rec.rank ASC;
 """
@@ -57,6 +59,7 @@ SELECT
     p.arxiv_id,
     p.title,
     COALESCE(p.abstract, '') AS abstract,
+    d.description,
     p.pdf_url,
     rec.run_id::text,
     r.category,
@@ -71,6 +74,7 @@ JOIN recommendations rec
   ON rec.run_id = lr.run_id
  AND rec.profile_id = %s
 JOIN papers p ON p.arxiv_id = rec.arxiv_id
+LEFT JOIN descriptions d ON d.arxiv_id = p.arxiv_id
 JOIN runs r ON r.run_id = rec.run_id
 ORDER BY rec.rank ASC;
 """
@@ -89,6 +93,7 @@ class DailyPickRow:
     arxiv_id: str
     title: str
     abstract: str
+    description: str | None
     pdf_url: str | None
     run_id: str
     category: str
@@ -140,15 +145,16 @@ def fetch_latest_picks(
             arxiv_id=row[1],
             title=row[2],
             abstract=row[3],
-            pdf_url=row[4],
-            run_id=row[5],
-            category=row[6],
-            generated_at=row[7],
-            base_dense_score=float(row[8]),
-            keyword_boost=float(row[9]),
-            final_score=float(row[10]),
-            candidate_window=row[11],
-            fallback_stage=int(row[12]),
+            description=row[4],
+            pdf_url=row[5],
+            run_id=row[6],
+            category=row[7],
+            generated_at=row[8],
+            base_dense_score=float(row[9]),
+            keyword_boost=float(row[10]),
+            final_score=float(row[11]),
+            candidate_window=row[12],
+            fallback_stage=int(row[13]),
         )
         for row in rows
     ]

@@ -9,9 +9,44 @@ const sectionsWrap = document.getElementById("sections-wrap");
 const generateBtn = document.getElementById("generate-btn");
 const debugResetDbBtn = document.getElementById("debug-reset-db-btn");
 const sectionTemplate = document.getElementById("section-template");
+const GENERATE_PROGRESS_POLL_MS = 500;
+let generateProgressTimer = null;
 
 function setStatus(message, isError) {
   setPageStatus(digestStatus, message, isError);
+}
+
+function formatGenerateProgress(progress) {
+  if (!progress || !progress.active) {
+    return "";
+  }
+  var text = progress.label || progress.step || "Working…";
+  if (progress.detail) {
+    text += " " + progress.detail;
+  }
+  return text;
+}
+
+function stopGenerateProgressPolling() {
+  if (generateProgressTimer !== null) {
+    clearInterval(generateProgressTimer);
+    generateProgressTimer = null;
+  }
+}
+
+function startGenerateProgressPolling() {
+  stopGenerateProgressPolling();
+  generateProgressTimer = setInterval(async function () {
+    try {
+      var progress = await apiRequest("/daily-picks/generate/progress", "GET");
+      var message = formatGenerateProgress(progress);
+      if (message) {
+        setStatus(message, false);
+      }
+    } catch (_error) {
+      // Ignore poll errors; the POST will surface failures.
+    }
+  }, GENERATE_PROGRESS_POLL_MS);
 }
 
 function sectionHeading(section) {
@@ -75,6 +110,13 @@ function renderSections(sections) {
       item.appendChild(indexSpan);
       item.appendChild(title);
 
+      if (pick.description) {
+        const description = document.createElement("p");
+        description.className = "digest-pick-description";
+        description.textContent = pick.description;
+        item.appendChild(description);
+      }
+
       const score = document.createElement("span");
       score.className = "digest-score";
       const pct = scoreDisplayPercent(pick.final_score);
@@ -129,20 +171,38 @@ async function loadDigest() {
 }
 
 async function generateDigest() {
-  setStatus("", false);
+  setStatus("Starting…", false);
   generateBtn.disabled = true;
+  startGenerateProgressPolling();
   try {
     const profilesPayload = await apiRequest("/profiles", "GET");
     const profileIds = (profilesPayload.profiles || [])
       .filter((p) => p.digest_enabled)
       .map((p) => p.profile_id);
     if (!profileIds.length) {
-      throw new Error("Turn on at least one profile for the digest in Preferences.");
+      throw new Error("Select at least one profile for the digest.");
     }
     await apiRequest("/daily-picks/generate", "POST", { profile_ids: profileIds });
-    await loadDigest();
-    setStatus("", false);
+    const digestPayload = await apiRequest("/daily-picks", "GET");
+    renderSections(digestPayload.sections || []);
+    const allPicks = (digestPayload.sections || []).flatMap(function (section) {
+      return section.picks || [];
+    });
+    if (
+      allPicks.length > 0 &&
+      allPicks.every(function (pick) {
+        return !pick.description;
+      })
+    ) {
+      setStatus(
+        "Descriptions were not generated as LLM timed out.",
+        false,
+      );
+    } else {
+      setStatus("", false);
+    }
   } finally {
+    stopGenerateProgressPolling();
     generateBtn.disabled = false;
   }
 }

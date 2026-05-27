@@ -169,7 +169,7 @@ def is_database_rate_limit_enabled() -> bool:
     return is_production()
 
 
-# Email
+# Emails
 def get_smtp_host() -> str:
     return os.getenv("SMTP_HOST", "").strip()
 
@@ -201,3 +201,36 @@ def get_smtp_use_ssl() -> bool:
 
 def is_email_delivery_configured() -> bool:
     return bool(get_smtp_host() and get_email_from())
+
+
+# Descriptions
+def get_llm_provider_name() -> str:
+    return os.getenv("LLM_PROVIDER", "ollama").strip().lower() or "ollama"
+
+
+def get_llm_base_url() -> str:
+    return os.getenv("LLM_BASE_URL", "http://ollama:11434").strip()
+
+
+def get_llm_model() -> str:
+    return os.getenv("LLM_MODEL", "llama3.2:3b").strip()
+
+
+def get_llm_batch_concurrency() -> int:
+    return max(1, int(os.getenv("LLM_BATCH_CONCURRENCY", "1")))
+
+
+def get_llm_batch_timeout_s() -> int:
+    return max(1, int(os.getenv("LLM_BATCH_TIMEOUT_S", "600")))
+
+
+def get_llm_request_timeout_s() -> int:
+    return max(1, int(os.getenv("LLM_REQUEST_TIMEOUT_S", "120")))
+
+
+def get_llm_prompt_version() -> int:
+    return max(1, int(os.getenv("LLM_PROMPT_VERSION", "1")))
+
+
+def get_llm_abstract_max_chars() -> int:
+    return max(200, int(os.getenv("LLM_ABSTRACT_MAX_CHARS", "1500")))

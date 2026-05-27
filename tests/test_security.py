@@ -46,6 +46,7 @@ def unauthenticated_client(monkeypatch):
     [
         ("GET", "/profiles", None),
         ("GET", "/daily-picks", None),
+        ("GET", "/daily-picks/generate/progress", None),
         ("GET", "/daily-picks/debug?profile_id=profile-1", None),
         ("GET", "/api/feedback/hub", None),
         ("POST", "/profiles", {"category": "cs.AI", "interest_sentence": "test"}),

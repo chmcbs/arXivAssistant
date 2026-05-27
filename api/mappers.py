@@ -13,6 +13,7 @@ def to_public_pick(row: DailyPickRow) -> dict:
         "arxiv_id": row.arxiv_id,
         "title": row.title,
         "abstract": row.abstract,
+        "description": row.description,
         "pdf_url": row.pdf_url,
         "final_score": row.final_score,
     }

@@ -9,7 +9,8 @@ from core.config import (
     get_ingestion_max_results,
 )
 from core.pipeline import run_recommendations_for_profiles, run_shared_pipeline_steps
-from core.profiles import list_digest_selected_profile_ids
+from core.descriptions import run_description_batch_for_recommendations
+from core.profiles import list_digest_categories, list_digest_selected_profile_ids
 
 logger = get_logger(__name__)
 
@@ -75,7 +76,9 @@ def run_daily_digest_for_all_users(
     shared_run_ids: list[str] = []
     if users_to_process:
         try:
+            ingest_categories = list_digest_categories(conn=conn)
             shared = run_shared_pipeline_steps(
+                categories=ingest_categories,
                 max_results=resolved_max_results,
                 embedding_limit=resolved_embedding_limit,
             )
@@ -102,6 +105,7 @@ def run_daily_digest_for_all_users(
                 "users_succeeded": succeeded,
                 "users_failed": failed,
                 "users_skipped": skipped,
+                "description_batch": {},
                 "results": results,
             }
             logger.info(
@@ -151,11 +155,29 @@ def run_daily_digest_for_all_users(
                 }
             )
 
+    description_batch = {}
+    if shared_run_ids and users_to_process:
+        try:
+            description_batch = run_description_batch_for_recommendations(
+                run_ids=shared_run_ids,
+                conn=conn,
+            )
+        except Exception as error:
+            logger.exception(
+                "Daily digest blurb batch failed",
+                extra={
+                    "event": "llm.batch.failed",
+                    "run_ids": shared_run_ids,
+                    "error_type": error.__class__.__name__,
+                },
+            )
+
     payload = {
         "users_seen": len(user_ids),
         "users_succeeded": succeeded,
         "users_failed": failed,
         "users_skipped": skipped,
+        "description_batch": description_batch,
         "results": results,
     }
     logger.info(

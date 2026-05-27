@@ -38,11 +38,32 @@ def _patch_category_matching(
 ) -> None:
     profile_categories = profile_categories or {}
     run_categories = run_categories or {}
+    expected_user_id = user_id
 
     def mock_get_profile(profile_id: str):
         category = profile_categories.get(profile_id, "cs.AI")
         return _profile_row(profile_id, user_id=user_id, category=category)
 
+    def mock_categories_for_profile_ids(
+        *,
+        user_id: str,
+        profile_ids: list[str],
+        **kwargs,
+    ):
+        assert user_id == expected_user_id
+        del kwargs
+        return list(
+            dict.fromkeys(
+                profile_categories.get(profile_id, "cs.AI")
+                for profile_id in profile_ids
+            )
+        )
+
+    monkeypatch.setattr(
+        pipeline,
+        "categories_for_profile_ids",
+        Mock(side_effect=mock_categories_for_profile_ids),
+    )
     monkeypatch.setattr(
         pipeline,
         "fetch_run_categories",
@@ -63,8 +84,10 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
         pipeline,
         "run_ingestion",
         Mock(
-            side_effect=lambda max_results: calls.append(("run_ingestion", max_results))
-            or ["run-1", "run-2"]
+            side_effect=lambda categories=None, max_results=150: calls.append(
+            ("run_ingestion", categories, max_results)
+        )
+        or ["run-1", "run-2"]
         ),
     )
     monkeypatch.setattr(
@@ -82,6 +105,11 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
             or [{"rank": 1}]
         ),
     )
+    monkeypatch.setattr(
+        pipeline,
+        "run_description_batch_for_recommendations",
+        Mock(return_value={"succeeded": 0, "candidate_count": 0}),
+    )
 
     summary = pipeline.run_pipeline(
         user_id="default",
@@ -91,7 +119,7 @@ def test_run_pipeline_calls_steps_in_order(monkeypatch):
     )
 
     assert calls == [
-        ("run_ingestion", 123),
+        ("run_ingestion", ["cs.AI"], 123),
         ("run_embeddings", 456),
         ("generate_recommendations", "run-1", "default", "profile-1"),
         ("generate_recommendations", "run-2", "default", "profile-1"),
@@ -112,6 +140,11 @@ def test_run_pipeline_continues_when_recommendation_fails(monkeypatch):
     monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=3))
     monkeypatch.setattr(
         pipeline,
+        "run_description_batch_for_recommendations",
+        Mock(return_value={"succeeded": 0}),
+    )
+    monkeypatch.setattr(
+        pipeline,
         "generate_recommendations",
         Mock(side_effect=[RuntimeError("boom"), [{"rank": 1}]]),
     )
@@ -129,6 +162,11 @@ def test_run_pipeline_generates_for_multiple_profiles(monkeypatch):
     _patch_category_matching(monkeypatch)
     monkeypatch.setattr(pipeline, "run_ingestion", Mock(return_value=["run-1"]))
     monkeypatch.setattr(pipeline, "run_embeddings", Mock(return_value=2))
+    monkeypatch.setattr(
+        pipeline,
+        "run_description_batch_for_recommendations",
+        Mock(return_value={"succeeded": 0}),
+    )
     monkeypatch.setattr(
         pipeline,
         "generate_recommendations",
@@ -181,6 +219,6 @@ def test_run_shared_pipeline_steps_uses_config_defaults(monkeypatch):
 
     summary = pipeline.run_shared_pipeline_steps()
 
-    pipeline.run_ingestion.assert_called_once_with(max_results=111)
+    pipeline.run_ingestion.assert_called_once_with(categories=None, max_results=111)
     pipeline.run_embeddings.assert_called_once_with(limit=222)
     assert summary == {"run_ids": ["run-1"], "embedded_count": 4}
