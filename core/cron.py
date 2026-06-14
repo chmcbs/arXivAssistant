@@ -11,6 +11,7 @@ from core.config import (
     get_embedding_limit,
     get_email_from,
     get_ingestion_max_results,
+    get_llm_failure_alert_threshold,
     get_product_name,
     is_email_delivery_configured,
 )
@@ -22,6 +23,10 @@ from core.profiles import list_digest_categories, list_digest_selected_profile_i
 
 logger = get_logger(__name__)
 
+########################################
+################ SQL ###################
+########################################
+
 LIST_DIGEST_USER_IDS_SQL = """
 SELECT DISTINCT up.user_id
 FROM user_profiles up
@@ -32,60 +37,16 @@ ORDER BY up.user_id ASC;
 """
 
 
+########################################
+######### ORCHESTRATION ################
+########################################
+
 def list_users_with_digest_selection(conn=None) -> list[str]:
     with connection_scope(conn) as active_conn:
         with active_conn.cursor() as cur:
             cur.execute(LIST_DIGEST_USER_IDS_SQL)
             rows = cur.fetchall()
     return [row[0] for row in rows]
-
-
-def _notify_admins_of_blurb_failure(*, run_ids: list[str], error: Exception) -> None:
-    admin_emails = sorted(get_debug_admin_emails())
-    if not admin_emails:
-        logger.warning(
-            "LLM blurb batch failed but no admin recipients are configured",
-            extra={
-                "event": "llm.batch.admin_alert_skipped",
-                "run_ids": run_ids,
-            },
-        )
-        return
-    if not is_email_delivery_configured():
-        logger.warning(
-            "LLM blurb batch failed but SMTP is not configured",
-            extra={
-                "event": "llm.batch.admin_alert_skipped_unconfigured",
-                "run_ids": run_ids,
-            },
-        )
-        return
-
-    subject = f"[{get_product_name()}] LLM blurb batch failed"
-    body = (
-        "The digest pipeline failed to generate LLM descriptions.\n\n"
-        f"Run IDs: {', '.join(run_ids) if run_ids else 'none'}\n"
-        f"Error: {error.__class__.__name__}: {str(error).strip() or 'unknown'}\n\n"
-        "User digests continued to send without descriptions."
-    )
-
-    for admin_email in admin_emails:
-        message = EmailMessage()
-        message["Subject"] = subject
-        message["From"] = get_email_from()
-        message["To"] = admin_email
-        message.set_content(body)
-        try:
-            deliver_email_message(message)
-        except Exception:
-            logger.exception(
-                "Failed to send LLM blurb failure alert",
-                extra={
-                    "event": "llm.batch.admin_alert_failed",
-                    "to_email": admin_email,
-                    "run_ids": run_ids,
-                },
-            )
 
 
 def run_daily_digest_for_all_users(
@@ -215,11 +176,37 @@ def run_daily_digest_for_all_users(
 
     description_batch = {}
     if shared_run_ids and users_to_process:
+        # Continue digest delivery even when blurb generation degrades so core service remains available
         try:
             description_batch = run_description_batch_for_recommendations(
                 run_ids=shared_run_ids,
                 conn=conn,
             )
+            attempted = int(description_batch.get("attempted") or 0)
+            non_success_count = (
+                int(description_batch.get("failed") or 0)
+                + int(description_batch.get("skipped_timeout") or 0)
+                + int(description_batch.get("skipped_validation") or 0)
+            )
+            threshold = get_llm_failure_alert_threshold()
+            # Alert only when non-success rate crosses threshold to avoid noise from isolated failures
+            if attempted > 0 and (non_success_count / attempted) > threshold:
+                logger.warning(
+                    "LLM blurb batch exceeded failure threshold",
+                    extra={
+                        "event": "llm.batch.threshold_exceeded",
+                        "run_ids": shared_run_ids,
+                        "attempted": attempted,
+                        "non_success_count": non_success_count,
+                        "threshold": threshold,
+                    },
+                )
+                _notify_admins_of_blurb_degradation(
+                    run_ids=shared_run_ids,
+                    attempted=attempted,
+                    non_success_count=non_success_count,
+                    threshold=threshold,
+                )
         except Exception as error:
             logger.exception(
                 "Daily digest blurb batch failed",
@@ -260,6 +247,101 @@ def run_daily_digest_for_all_users(
         },
     )
     return payload
+
+
+########################################
+############ ADMIN ALERTS ##############
+########################################
+
+def _notify_admins_of_blurb_failure(*, run_ids: list[str], error: Exception) -> None:
+    admin_emails = sorted(get_debug_admin_emails())
+    if not admin_emails:
+        logger.warning(
+            "LLM blurb batch failed but no admin recipients are configured",
+            extra={
+                "event": "llm.batch.admin_alert_skipped",
+                "run_ids": run_ids,
+            },
+        )
+        return
+    if not is_email_delivery_configured():
+        logger.warning(
+            "LLM blurb batch failed but SMTP is not configured",
+            extra={
+                "event": "llm.batch.admin_alert_skipped_unconfigured",
+                "run_ids": run_ids,
+            },
+        )
+        return
+
+    subject = f"[{get_product_name()}] LLM blurb batch failed"
+    body = (
+        "The digest pipeline failed to generate LLM descriptions.\n\n"
+        f"Run IDs: {', '.join(run_ids) if run_ids else 'none'}\n"
+        f"Error: {error.__class__.__name__}: {str(error).strip() or 'unknown'}\n\n"
+        "User digests continued to send without descriptions."
+    )
+
+    for admin_email in admin_emails:
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = get_email_from()
+        message["To"] = admin_email
+        message.set_content(body)
+        try:
+            deliver_email_message(message)
+        except Exception:
+            logger.exception(
+                "Failed to send LLM blurb failure alert",
+                extra={
+                    "event": "llm.batch.admin_alert_failed",
+                    "to_email": admin_email,
+                    "run_ids": run_ids,
+                },
+            )
+
+
+def _notify_admins_of_blurb_degradation(
+    *,
+    run_ids: list[str],
+    attempted: int,
+    non_success_count: int,
+    threshold: float,
+) -> None:
+    admin_emails = sorted(get_debug_admin_emails())
+    if not admin_emails or not is_email_delivery_configured():
+        return
+
+    failure_rate = (non_success_count / attempted) if attempted else 0.0
+    subject = f"[{get_product_name()}] LLM blurb quality degraded"
+    body = (
+        "The digest pipeline generated LLM descriptions, but failure rate exceeded "
+        "the configured threshold.\n\n"
+        f"Run IDs: {', '.join(run_ids) if run_ids else 'none'}\n"
+        f"Attempted: {attempted}\n"
+        f"Non-success count: {non_success_count}\n"
+        f"Failure rate: {failure_rate:.1%}\n"
+        f"Threshold: {threshold:.1%}\n\n"
+        "User digests continued to send."
+    )
+
+    for admin_email in admin_emails:
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = get_email_from()
+        message["To"] = admin_email
+        message.set_content(body)
+        try:
+            deliver_email_message(message)
+        except Exception:
+            logger.exception(
+                "Failed to send LLM blurb quality alert",
+                extra={
+                    "event": "llm.batch.admin_alert_failed",
+                    "to_email": admin_email,
+                    "run_ids": run_ids,
+                },
+            )
 
 
 def main() -> None:

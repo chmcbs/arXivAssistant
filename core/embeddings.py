@@ -16,13 +16,6 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-@dataclass(frozen=True)
-class PaperForEmbedding:
-    arxiv_id: str
-    title: str
-    abstract: str
-
-
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 _encoder_lock = threading.Lock()
@@ -55,6 +48,13 @@ DO UPDATE SET
     model_name = EXCLUDED.model_name,
     embedded_at = NOW();
 """
+
+
+@dataclass(frozen=True)
+class PaperForEmbedding:
+    arxiv_id: str
+    title: str
+    abstract: str
 
 
 def get_papers_missing_embeddings(limit: int) -> list[PaperForEmbedding]:

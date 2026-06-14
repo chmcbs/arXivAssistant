@@ -330,11 +330,6 @@ def test_generation_run(
     )
 
 
-@app.post("/debug/digest-data/reset", response_model=DebugDigestDataResetResponse)
-def debug_reset_digest_data(request: Request) -> dict:
-    return debug_reset_digest_data_payload(request.cookies.get("session_id"))
-
-
 ########################################
 ############### FEEDBACK ###############
 ########################################
@@ -385,19 +380,6 @@ def profiles_list(request: Request) -> dict:
     return list_profiles_payload(user_id=user_id)
 
 
-@app.get("/api/email-settings", response_model=EmailSettingsResponse)
-def email_settings_get(request: Request) -> dict:
-    user_id = require_authenticated_user_id(request)
-    return get_email_settings_payload(user_id=user_id)
-
-
-@app.patch("/api/email-settings", response_model=EmailSettingsResponse)
-def email_settings_update(
-    body: UpdateEmailSettingsRequest,
-    request: Request,
-) -> dict:
-    user_id = require_authenticated_user_id(request)
-    return update_email_settings_payload(body, user_id=user_id)
 
 
 @app.put("/api/profiles/digest-selection", response_model=UpdateDigestSelectionResponse)
@@ -434,10 +416,23 @@ def profiles_delete(profile_id: str, request: Request) -> dict:
     return delete_profile_payload(profile_id=profile_id, user_id=user_id)
 
 
-@app.post("/debug/profile-data/reset", response_model=DebugProfileDataResetResponse)
-def debug_reset_profile_data(request: Request) -> dict:
-    return debug_reset_profile_data_payload(request.cookies.get("session_id"))
+########################################
+########### EMAIL SETTINGS #############
+########################################
 
+@app.get("/api/email-settings", response_model=EmailSettingsResponse)
+def email_settings_get(request: Request) -> dict:
+    user_id = require_authenticated_user_id(request)
+    return get_email_settings_payload(user_id=user_id)
+
+
+@app.patch("/api/email-settings", response_model=EmailSettingsResponse)
+def email_settings_update(
+    body: UpdateEmailSettingsRequest,
+    request: Request,
+) -> dict:
+    user_id = require_authenticated_user_id(request)
+    return update_email_settings_payload(body, user_id=user_id)
 
 ########################################
 ############### KEYWORDS ###############
@@ -490,6 +485,18 @@ def profiles_keywords_remove(
         user_id=user_id,
     )
 
+
+########################################
+################ DEBUG #################
+########################################
+
+@app.post("/debug/digest-data/reset", response_model=DebugDigestDataResetResponse)
+def debug_reset_digest_data(request: Request) -> dict:
+    return debug_reset_digest_data_payload(request.cookies.get("session_id"))
+
+@app.post("/debug/profile-data/reset", response_model=DebugProfileDataResetResponse)
+def debug_reset_profile_data(request: Request) -> dict:
+    return debug_reset_profile_data_payload(request.cookies.get("session_id"))
 
 ########################################
 ############### METRICS ################

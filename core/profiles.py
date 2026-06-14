@@ -12,6 +12,9 @@ from core.db import connection_scope
 from core.keyword_search import MAX_KEYWORDS_PER_PROFILE, normalize_keyword
 
 
+MAX_PROFILES_PER_USER = 3
+
+
 @dataclass(frozen=True)
 class ProfileRow:
     profile_id: str
@@ -23,8 +26,6 @@ class ProfileRow:
     created_at: object
     digest_enabled: bool
 
-
-MAX_PROFILES_PER_USER = 3
 
 LOCK_OCCUPIED_SLOTS_SQL = """
 SELECT profile_slot
@@ -438,6 +439,7 @@ def reorder_profiles(
             if set(ordered_profile_ids) != set(existing_profile_ids):
                 raise ValueError("some profile_ids do not belong to user")
 
+            # Stage slots out of range first to avoid transient slot collisions during reordering
             cur.execute(STAGE_PROFILE_SLOTS_FOR_REORDER_SQL, (user_id,))
 
             reorder_params: list[object] = []

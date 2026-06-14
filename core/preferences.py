@@ -99,6 +99,67 @@ def coerce_vector(raw_vector) -> list[float]:
     return [float(value) for value in raw_vector]
 
 
+def mean_vector(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+
+    dimension = len(vectors[0])
+
+    return [
+        sum(vector[index] for vector in vectors) / len(vectors)
+        for index in range(dimension)
+    ]
+
+
+# Mix feedback with the initial preference embedding
+def blend_vectors(
+    initial_vector: list[float],
+    feedback_vector: list[float],
+    alpha: float,
+) -> list[float]:
+    return [
+        alpha * initial_value + (1 - alpha) * feedback_value
+        for initial_value, feedback_value in zip(initial_vector, feedback_vector)
+    ]
+
+
+# Decay initial weight
+def feedback_alpha(num_feedbacks: int) -> float:
+    return 1 / (1 + num_feedbacks)
+
+
+# Normalise preference embedding so cosine distance compares direction rather than magnitude during ranking
+def normalize_vector(vector: list[float]) -> list[float]:
+    magnitude = sum(value * value for value in vector) ** 0.5
+
+    if magnitude == 0:
+        return vector
+
+    return [value / magnitude for value in vector]
+
+
+# Summarise overall feedback as a single vector
+def compute_preference_vector(
+    liked_vectors: list[list[float]],
+    disliked_vectors: list[list[float]],
+    dislike_weight: float = 0.5,
+) -> list[float]:
+    liked_mean = mean_vector(liked_vectors)
+
+    if not liked_mean:
+        raise ValueError("At least one liked paper is required to update preferences")
+
+    disliked_mean = mean_vector(disliked_vectors)
+
+    if not disliked_mean:
+        return liked_mean
+
+    return [
+        liked_value - dislike_weight * disliked_value
+        for liked_value, disliked_value in zip(liked_mean, disliked_mean)
+    ]
+
+
 # Cold start preference embedding
 def initialize_preference_embedding(
     interest_text: str,
@@ -164,68 +225,6 @@ def remove_feedback(
         with active_conn.cursor() as cur:
             cur.execute(DELETE_FEEDBACK_SQL, (resolved_profile_id, arxiv_id))
             return cur.rowcount > 0
-
-
-def mean_vector(vectors: list[list[float]]) -> list[float]:
-    if not vectors:
-        return []
-
-    dimension = len(vectors[0])
-
-    return [
-        sum(vector[index] for vector in vectors) / len(vectors)
-        for index in range(dimension)
-    ]
-
-
-# Mix feedback with the initial preference embedding
-def blend_vectors(
-    initial_vector: list[float],
-    feedback_vector: list[float],
-    alpha: float,
-) -> list[float]:
-    return [
-        alpha * initial_value + (1 - alpha) * feedback_value
-        for initial_value, feedback_value in zip(initial_vector, feedback_vector)
-    ]
-
-
-# Decay initial weight
-def feedback_alpha(num_feedbacks: int) -> float:
-    return 1 / (1 + num_feedbacks)
-
-
-# Normalise preference embedding so cosine distance compares direction rather than magnitude during ranking
-def normalize_vector(vector: list[float]) -> list[float]:
-    magnitude = sum(value * value for value in vector) ** 0.5
-
-    if magnitude == 0:
-        return vector
-
-    return [value / magnitude for value in vector]
-
-
-# Summarise overall feedback as a single vector
-def compute_preference_vector(
-    liked_vectors: list[list[float]],
-    disliked_vectors: list[list[float]],
-    dislike_weight: float = 0.5,
-) -> list[float]:
-    liked_mean = mean_vector(liked_vectors)
-
-    if not liked_mean:
-        raise ValueError("At least one liked paper is required to update preferences")
-
-    disliked_mean = mean_vector(disliked_vectors)
-
-    if not disliked_mean:
-        return liked_mean
-
-    return [
-        liked_value - dislike_weight * disliked_value
-        for liked_value, disliked_value in zip(liked_mean, disliked_mean)
-    ]
-
 
 def update_preference_embedding(
     user_id: str,

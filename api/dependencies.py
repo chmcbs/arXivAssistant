@@ -128,6 +128,7 @@ def _to_http_exception(error: Exception) -> HTTPException:
 
 def _require_debug_admin_session(session: dict) -> None:
     if not is_debug_features_enabled():
+        # Return 404 when debug features are disabled so debug endpoints do not advertise themselves
         raise HTTPException(status_code=404, detail="Not found")
     if not session["authenticated"]:
         raise HTTPException(status_code=401, detail="Sign in required")
@@ -193,6 +194,84 @@ def require_authenticated_user_id(request: Request) -> str:
     if not session["authenticated"] or not session["user_id"]:
         raise HTTPException(status_code=401, detail="Sign in required")
     return str(session["user_id"])
+
+
+########################################
+################ AUTH ##################
+########################################
+
+def request_magic_link_payload(
+    request: RequestMagicLinkRequest,
+    client_ip: str,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
+    try:
+        _enforce_magic_link_request_limits(request.email, client_ip)
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return request_magic_link_payload_service(
+                request=request,
+                create_magic_link=lambda email: create_magic_link(
+                    email=email, conn=active_uow.conn
+                ),
+                send_magic_link_email=send_magic_link_email,
+                app_base_url=get_app_base_url(),
+                expose_magic_link=is_dev_magic_link_response_enabled(),
+            )
+    except EmailDeliveryError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except ValueError as error:
+        raise _to_http_exception(error) from error
+
+
+def verify_magic_link_payload(
+    token: str,
+    client_ip: str,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
+    try:
+        _enforce_magic_link_verify_limit(client_ip)
+        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+            return verify_magic_link_payload_service(
+                token=token,
+                verify_magic_link=lambda value: verify_magic_link(
+                    token=value, conn=active_uow.conn
+                ),
+            )
+    except ValueError as error:
+        raise _to_http_exception(error) from error
+
+
+def logout_payload(session_id: str | None, conn=None) -> dict:
+    if session_id:
+        with open_api_unit_of_work(conn=conn) as active_uow:
+            revoke_session(session_id=session_id, conn=active_uow.conn)
+    return {"logged_out": True}
+
+
+def get_auth_session_payload(
+    session_id: str | None,
+    uow: ApiUnitOfWork | None = None,
+    conn=None,
+) -> dict:
+    with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
+        resolved = get_session_user(session_id=session_id or "", conn=active_uow.conn)
+    if resolved is None:
+        return {
+            "authenticated": False,
+            "user_id": None,
+            "email": None,
+            "can_debug_access": False,
+        }
+    user_id, email = resolved
+    return {
+        "authenticated": True,
+        "user_id": user_id,
+        "email": email,
+        "can_debug_access": can_use_debug_features(email),
+    }
+
 
 
 ########################################
@@ -354,6 +433,17 @@ def debug_reset_digest_data_payload(session_id: str | None) -> dict:
     _require_debug_admin_session(session)
     with open_api_unit_of_work() as uow:
         return reset_papers_and_runs(uow.conn)
+
+
+########################################
+################ DEBUG #################
+########################################
+
+def debug_reset_profile_data_payload(session_id: str | None) -> dict:
+    session = get_auth_session_payload(session_id)
+    _require_debug_admin_session(session)
+    with open_api_unit_of_work() as uow:
+        return reset_user_profiles(uow.conn)
 
 
 ########################################
@@ -684,13 +774,6 @@ def reorder_profiles_payload(
         raise _to_http_exception(error) from error
 
 
-def debug_reset_profile_data_payload(session_id: str | None) -> dict:
-    session = get_auth_session_payload(session_id)
-    _require_debug_admin_session(session)
-    with open_api_unit_of_work() as uow:
-        return reset_user_profiles(uow.conn)
-
-
 ########################################
 ############### KEYWORDS ###############
 ########################################
@@ -788,81 +871,4 @@ def get_metrics_payload(
             )
     except ValueError as error:
         raise _to_http_exception(error) from error
-
-
-########################################
-################ AUTH ##################
-########################################
-
-def request_magic_link_payload(
-    request: RequestMagicLinkRequest,
-    client_ip: str,
-    uow: ApiUnitOfWork | None = None,
-    conn=None,
-) -> dict:
-    try:
-        _enforce_magic_link_request_limits(request.email, client_ip)
-        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
-            return request_magic_link_payload_service(
-                request=request,
-                create_magic_link=lambda email: create_magic_link(
-                    email=email, conn=active_uow.conn
-                ),
-                send_magic_link_email=send_magic_link_email,
-                app_base_url=get_app_base_url(),
-                expose_magic_link=is_dev_magic_link_response_enabled(),
-            )
-    except EmailDeliveryError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except ValueError as error:
-        raise _to_http_exception(error) from error
-
-
-def verify_magic_link_payload(
-    token: str,
-    client_ip: str,
-    uow: ApiUnitOfWork | None = None,
-    conn=None,
-) -> dict:
-    try:
-        _enforce_magic_link_verify_limit(client_ip)
-        with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
-            return verify_magic_link_payload_service(
-                token=token,
-                verify_magic_link=lambda value: verify_magic_link(
-                    token=value, conn=active_uow.conn
-                ),
-            )
-    except ValueError as error:
-        raise _to_http_exception(error) from error
-
-
-def logout_payload(session_id: str | None, conn=None) -> dict:
-    if session_id:
-        with open_api_unit_of_work(conn=conn) as active_uow:
-            revoke_session(session_id=session_id, conn=active_uow.conn)
-    return {"logged_out": True}
-
-
-def get_auth_session_payload(
-    session_id: str | None,
-    uow: ApiUnitOfWork | None = None,
-    conn=None,
-) -> dict:
-    with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
-        resolved = get_session_user(session_id=session_id or "", conn=active_uow.conn)
-    if resolved is None:
-        return {
-            "authenticated": False,
-            "user_id": None,
-            "email": None,
-            "can_debug_access": False,
-        }
-    user_id, email = resolved
-    return {
-        "authenticated": True,
-        "user_id": user_id,
-        "email": email,
-        "can_debug_access": can_use_debug_features(email),
-    }
 

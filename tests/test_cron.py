@@ -202,3 +202,59 @@ def test_run_daily_digest_for_all_users_skips_alert_when_no_admin_recipients(
 
     assert payload["users_succeeded"] == 1
     send_admin_alert.assert_not_called()
+
+
+def test_run_daily_digest_for_all_users_alerts_when_failure_threshold_exceeded(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        cron,
+        "list_users_with_digest_selection",
+        Mock(return_value=["user-1"]),
+    )
+    monkeypatch.setattr(
+        cron,
+        "list_digest_selected_profile_ids",
+        Mock(return_value=["profile-1"]),
+    )
+    monkeypatch.setattr(cron, "list_digest_categories", Mock(return_value=["cs.AI"]))
+    monkeypatch.setattr(
+        cron,
+        "run_shared_pipeline_steps",
+        Mock(return_value={"run_ids": ["run-shared"], "embedded_count": 3}),
+    )
+    monkeypatch.setattr(cron, "run_recommendations_for_profiles", Mock())
+    monkeypatch.setattr(
+        cron,
+        "run_description_batch_for_recommendations",
+        Mock(
+            return_value={
+                "attempted": 10,
+                "succeeded": 6,
+                "failed": 2,
+                "skipped_timeout": 1,
+                "skipped_validation": 1,
+                "skipped_budget": 0,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        cron,
+        "deliver_digest_email_for_user",
+        Mock(return_value={"status": "sent", "error_message": None}),
+    )
+    monkeypatch.setattr(cron, "get_debug_admin_emails", lambda: frozenset({"admin@example.com"}))
+    monkeypatch.setattr(cron, "is_email_delivery_configured", lambda: True)
+    monkeypatch.setattr(cron, "get_product_name", lambda: "Paper Radar")
+    monkeypatch.setattr(cron, "get_email_from", lambda: "noreply@example.com")
+    monkeypatch.setattr(cron, "get_llm_failure_alert_threshold", lambda: 0.10)
+    send_admin_alert = Mock()
+    monkeypatch.setattr(cron, "deliver_email_message", send_admin_alert)
+
+    payload = cron.run_daily_digest_for_all_users()
+
+    assert payload["users_succeeded"] == 1
+    send_admin_alert.assert_called_once()
+    message = send_admin_alert.call_args.args[0]
+    assert "LLM blurb quality degraded" in message["Subject"]
+    assert "Failure rate: 40.0%" in message.get_content()

@@ -16,9 +16,6 @@ class RateLimitExceeded(ValueError):
     """Raised when a caller exceeds a configured rate limit."""
 
 
-_lock = threading.Lock()
-_attempts: dict[str, list[float]] = {}
-
 DELETE_EXPIRED_RATE_LIMIT_EVENTS_SQL = """
 DELETE FROM rate_limit_events
 WHERE attempted_at < %s;
@@ -35,6 +32,10 @@ INSERT_RATE_LIMIT_EVENT_SQL = """
 INSERT INTO rate_limit_events (bucket_key)
 VALUES (%s);
 """
+
+
+_lock = threading.Lock()
+_attempts: dict[str, list[float]] = {}
 
 
 def check_rate_limit(key: str, *, max_attempts: int, window_seconds: int) -> None:
@@ -62,6 +63,7 @@ def _check_rate_limit_in_memory(
     cutoff = now - window_seconds
 
     with _lock:
+        # Rebuild buckets on each call to drop expired timestamps in one pass without background cleanup
         pruned: dict[str, list[float]] = {}
         for bucket_key, timestamps in _attempts.items():
             active = [timestamp for timestamp in timestamps if timestamp >= cutoff]
