@@ -72,6 +72,12 @@ SET preference_embedding = %s::vector,
 WHERE profile_id = %s;
 """
 
+RESET_ALL_PREFERENCE_EMBEDDINGS_SQL = """
+UPDATE profile_preferences
+SET preference_embedding = initial_interest_embedding,
+    updated_at = NOW();
+"""
+
 DELETE_FEEDBACK_SQL = """
 DELETE FROM paper_feedback
 WHERE profile_id = %s
@@ -288,3 +294,10 @@ def update_preference_embedding(
                 UPDATE_PREFERENCE_EMBEDDING_SQL,
                 (preference_vector_literal, resolved_profile_id),
             )
+
+
+def reset_all_preference_embeddings(conn=None) -> int:
+    with connection_scope(conn) as active_conn:
+        with active_conn.cursor() as cur:
+            cur.execute(RESET_ALL_PREFERENCE_EMBEDDINGS_SQL)
+            return cur.rowcount

@@ -261,6 +261,7 @@ class AuthSessionResponse(BaseModel):
 class DebugDigestDataResetResponse(BaseModel):
     deleted_runs: int
     deleted_papers: int
+    reset_preference_embeddings: int
 
 
 class DebugProfileDataResetResponse(BaseModel):

@@ -223,7 +223,8 @@ generateBtn.addEventListener("click", async () => {
 debugResetDbBtn.addEventListener("click", async () => {
   var ok = window.confirm(
     "Delete ALL papers, ingestion runs, recommendations, and feedback from the database?\n\n" +
-      "Profiles, keywords, and profile preferences are kept.\n\n" +
+      "Profiles, keywords, and profile preferences are kept. Preference embeddings are reset " +
+      "to each profile's initial interest sentence.\n\n" +
       "Admin-only debug reset. Requires DEBUG_ADMIN_EMAILS on the server.",
   );
   if (!ok) {
@@ -239,7 +240,9 @@ debugResetDbBtn.addEventListener("click", async () => {
         result.deleted_runs +
         " run(s) and " +
         result.deleted_papers +
-        " paper(s). Profiles and keywords unchanged.",
+        " paper(s). Reset " +
+        result.reset_preference_embeddings +
+        " preference embedding(s) to initial interest.",
       false,
     );
   } catch (error) {
