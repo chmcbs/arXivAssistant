@@ -14,14 +14,14 @@ from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
 from api.schemas import (
     FeedbackRequest,
-    GenerateDailyPicksRequest,
+    TestGenerationRequest,
     ManageProfileKeywordRequest,
     UpdateDigestSelectionRequest,
 )
-from api.services.daily_picks import (
-    generate_daily_picks_payload,
-    get_daily_picks_payload,
-    get_debug_daily_picks_payload,
+from api.services.test_generation import (
+    run_test_generation_payload,
+    get_test_generation_payload,
+    get_test_generation_debug_payload,
 )
 from api.services.feedback import save_feedback_payload
 from api.services.errors import BadRequestError, InternalServerError
@@ -52,8 +52,8 @@ def _pick_row(rank=1):
     )
 
 
-def test_get_daily_picks_returns_empty_state():
-    payload = get_daily_picks_payload(
+def test_get_test_generation_returns_empty_state():
+    payload = get_test_generation_payload(
         user_id="default",
         profile_id=None,
         resolve_profile=Mock(
@@ -86,8 +86,8 @@ def test_get_daily_picks_returns_empty_state():
     }
 
 
-def test_get_daily_picks_returns_public_fields():
-    payload = get_daily_picks_payload(
+def test_get_test_generation_returns_public_fields():
+    payload = get_test_generation_payload(
         user_id="default",
         profile_id=None,
         resolve_profile=Mock(
@@ -118,7 +118,7 @@ def test_get_daily_picks_returns_public_fields():
     assert payload["sections"][0]["category"] == "cs.AI"
 
 
-def test_get_daily_picks_returns_multi_profile_sections():
+def test_get_test_generation_returns_multi_profile_sections():
     resolve_profile = Mock(
         side_effect=[
             {
@@ -136,7 +136,7 @@ def test_get_daily_picks_returns_multi_profile_sections():
         ]
     )
     fetch_latest_picks = Mock(side_effect=[[_pick_row(rank=1)], []])
-    payload = get_daily_picks_payload(
+    payload = get_test_generation_payload(
         user_id="default",
         profile_id=None,
         resolve_profile=resolve_profile,
@@ -155,8 +155,8 @@ def test_get_daily_picks_returns_multi_profile_sections():
     assert payload["sections"][1]["picks"] == []
 
 
-def test_get_daily_picks_anchored_run_ids_treat_empty_as_generated():
-    payload = get_daily_picks_payload(
+def test_get_test_generation_anchored_run_ids_treat_empty_as_generated():
+    payload = get_test_generation_payload(
         user_id="default",
         profile_id=None,
         anchored_run_ids=["run-123"],
@@ -177,8 +177,8 @@ def test_get_daily_picks_anchored_run_ids_treat_empty_as_generated():
     assert payload["sections"][0]["picks"] == []
 
 
-def test_get_debug_daily_picks_includes_ranking_metadata():
-    payload = get_debug_daily_picks_payload(
+def test_get_test_generation_debug_includes_ranking_metadata():
+    payload = get_test_generation_debug_payload(
         user_id="default",
         profile_id="profile-1",
         resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
@@ -194,7 +194,9 @@ def test_get_debug_daily_picks_includes_ranking_metadata():
     assert payload["picks"][0]["fallback_stage"] == 0
 
 
-def test_generate_daily_picks_runs_pipeline_and_returns_picks():
+def test_run_test_generation_runs_pipeline_and_returns_picks(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
     run_pipeline = Mock(
         return_value={
             "run_ids": ["run-123"],
@@ -221,7 +223,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
             },
         }
     )
-    get_daily_picks = Mock(
+    get_test_generation = Mock(
         return_value={
             "user_id": "default",
             "profile_id": "profile-1",
@@ -248,18 +250,19 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         }
     )
 
-    payload = generate_daily_picks_payload(
-        GenerateDailyPicksRequest(
+    payload = run_test_generation_payload(
+        TestGenerationRequest(
             profile_ids=["profile-1", "profile-2"],
             max_results=123,
             embedding_limit=456,
         ),
         user_id="default",
+        admin_email="admin@example.com",
         resolve_profile=Mock(
             side_effect=lambda user_id, profile_id: {"profile_id": profile_id}
         ),
         run_pipeline=run_pipeline,
-        get_daily_picks_payload=get_daily_picks,
+        get_test_generation_payload=get_test_generation,
     )
 
     run_pipeline.assert_called_once_with(
@@ -268,7 +271,7 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
         max_results=123,
         embedding_limit=456,
     )
-    get_daily_picks.assert_called_once_with(
+    get_test_generation.assert_called_once_with(
         user_id="default",
         profile_id=None,
         run_ids=["run-123"],
@@ -301,14 +304,19 @@ def test_generate_daily_picks_runs_pipeline_and_returns_picks():
     assert len(payload["sections"]) == 2
 
 
-def test_generate_daily_picks_allows_zero_recommendations_when_generation_succeeds():
-    payload = generate_daily_picks_payload(
-        GenerateDailyPicksRequest(
+def test_run_test_generation_allows_zero_recommendations_when_generation_succeeds(
+    monkeypatch,
+):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    payload = run_test_generation_payload(
+        TestGenerationRequest(
             profile_ids=["profile-1"],
             max_results=123,
             embedding_limit=456,
         ),
         user_id="default",
+        admin_email="admin@example.com",
         resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
         run_pipeline=Mock(
             return_value={
@@ -326,7 +334,7 @@ def test_generate_daily_picks_allows_zero_recommendations_when_generation_succee
                 },
             }
         ),
-        get_daily_picks_payload=Mock(
+        get_test_generation_payload=Mock(
             return_value={
                 "user_id": "default",
                 "profile_id": "profile-1",
@@ -355,11 +363,14 @@ def test_generate_daily_picks_allows_zero_recommendations_when_generation_succee
     assert payload["picks"] == []
 
 
-def test_generate_daily_picks_fails_when_all_targets_fail():
+def test_run_test_generation_fails_when_all_targets_fail(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
     with pytest.raises(InternalServerError) as error:
-        generate_daily_picks_payload(
-            GenerateDailyPicksRequest(profile_ids=["profile-1"]),
+        run_test_generation_payload(
+            TestGenerationRequest(profile_ids=["profile-1"]),
             user_id="default",
+            admin_email="admin@example.com",
             resolve_profile=Mock(return_value={"profile_id": "profile-1"}),
             run_pipeline=Mock(
                 return_value={
@@ -377,7 +388,7 @@ def test_generate_daily_picks_fails_when_all_targets_fail():
                     },
                 }
             ),
-            get_daily_picks_payload=Mock(
+            get_test_generation_payload=Mock(
                 return_value={
                     "user_id": "default",
                     "profile_id": "profile-1",
@@ -391,11 +402,11 @@ def test_generate_daily_picks_fails_when_all_targets_fail():
     assert "NO_SUCCESSFUL_GENERATION" in str(error.value)
 
 
-def test_generate_daily_picks_request_requires_profile_ids():
+def test_run_test_generation_request_requires_profile_ids():
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        GenerateDailyPicksRequest(profile_ids=[])
+        TestGenerationRequest(profile_ids=[])
 
 
 def test_save_feedback_payload_updates_preferences():
@@ -529,7 +540,7 @@ def test_get_metrics_payload_returns_run_and_recommendation_counts():
     assert payload["recommendations_by_profile"] == {"profile-1": 3}
 
 
-def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
+def test_dependencies_get_test_generation_reuses_single_connection(monkeypatch):
     sentinel_conn = object()
     sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
     seen = {}
@@ -547,7 +558,7 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
         return {"ok": True}
 
     monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
-    monkeypatch.setattr(dependencies, "get_daily_picks_payload_service", fake_service)
+    monkeypatch.setattr(dependencies, "get_test_generation_payload_service", fake_service)
     monkeypatch.setattr(
         dependencies,
         "_resolve_profile",
@@ -566,7 +577,7 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
         or [],
     )
 
-    payload = dependencies.get_daily_picks_payload(
+    payload = dependencies.get_test_generation_payload(
         user_id="default", profile_id="profile-1"
     )
 
@@ -576,7 +587,7 @@ def test_dependencies_get_daily_picks_reuses_single_connection(monkeypatch):
     assert seen["picks_conn"] is sentinel_conn
 
 
-def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch):
+def test_dependencies_get_test_generation_passes_run_ids_to_pick_lookup(monkeypatch):
     sentinel_conn = object()
     sentinel_uow = type("Uow", (), {"conn": sentinel_conn, "generated_run_ids": []})()
     seen = {}
@@ -592,7 +603,7 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
         return {"ok": True}
 
     monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
-    monkeypatch.setattr(dependencies, "get_daily_picks_payload_service", fake_service)
+    monkeypatch.setattr(dependencies, "get_test_generation_payload_service", fake_service)
     monkeypatch.setattr(
         dependencies,
         "_resolve_profile",
@@ -613,7 +624,7 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
         or [],
     )
 
-    payload = dependencies.get_daily_picks_payload(
+    payload = dependencies.get_test_generation_payload(
         user_id="default",
         profile_id="profile-1",
         run_ids=["run-1", "run-2"],
@@ -627,7 +638,7 @@ def test_dependencies_get_daily_picks_passes_run_ids_to_pick_lookup(monkeypatch)
     }
 
 
-def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(
+def test_dependencies_run_test_generation_maps_internal_failures_to_http_500(
     monkeypatch,
 ):
     sentinel_conn = object()
@@ -642,14 +653,15 @@ def test_dependencies_generate_daily_picks_maps_internal_failures_to_http_500(
     monkeypatch.setattr(dependencies, "open_api_unit_of_work", fake_uow)
     monkeypatch.setattr(
         dependencies,
-        "generate_daily_picks_payload_service",
+        "run_test_generation_payload_service",
         Mock(side_effect=InternalServerError("NO_SUCCESSFUL_GENERATION: failed")),
     )
 
     with pytest.raises(HTTPException) as error:
-        dependencies.generate_daily_picks_payload(
-            GenerateDailyPicksRequest(profile_ids=["profile-1"]),
+        dependencies.run_test_generation_payload(
+            TestGenerationRequest(profile_ids=["profile-1"]),
             user_id="default",
+            admin_email="admin@example.com",
         )
 
     assert error.value.status_code == 500

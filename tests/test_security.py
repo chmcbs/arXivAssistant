@@ -45,16 +45,8 @@ def unauthenticated_client(monkeypatch):
     "method,path,json_body",
     [
         ("GET", "/api/profiles", None),
-        ("GET", "/daily-picks", None),
-        ("GET", "/daily-picks/generate/progress", None),
-        ("GET", "/daily-picks/debug?profile_id=profile-1", None),
         ("GET", "/api/papers/hub", None),
         ("POST", "/api/profiles", {"category": "cs.AI", "interest_sentence": "test"}),
-        (
-            "POST",
-            "/daily-picks/generate",
-            {"profile_ids": ["profile-1"]},
-        ),
         (
             "POST",
             "/api/feedback",
@@ -108,7 +100,35 @@ def test_magic_link_redirect_rejects_unlisted_paths(monkeypatch):
     assert response.headers["location"] == "/profiles"
 
 
-def test_magic_link_redirect_allows_known_app_paths(monkeypatch):
+def test_magic_link_redirect_allows_debug_paths_for_admin(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        routes,
+        "verify_magic_link_payload",
+        Mock(
+            return_value={
+                "verified": True,
+                "session_id": "session-123",
+                "user_id": "admin@example.com",
+                "email": "admin@example.com",
+            }
+        ),
+    )
+    client = TestClient(routes.app)
+    response = client.get(
+        "/auth/magic-link/verify?token=abc&next=/digest",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/digest"
+    assert "csrf_token=" in response.headers["set-cookie"]
+
+
+def test_magic_link_redirect_rejects_digest_for_non_admin(monkeypatch):
+    monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
     monkeypatch.setattr(
         routes,
         "verify_magic_link_payload",
@@ -128,8 +148,7 @@ def test_magic_link_redirect_allows_known_app_paths(monkeypatch):
     )
 
     assert response.status_code == 302
-    assert response.headers["location"] == "/digest"
-    assert "csrf_token=" in response.headers["set-cookie"]
+    assert response.headers["location"] == "/profiles"
 
 
 def test_validate_route_hidden_when_debug_disabled(monkeypatch):
@@ -158,7 +177,13 @@ def test_debug_routes_hidden_from_unauthenticated_users_when_debug_disabled(
     )
     client = TestClient(routes.app)
 
-    for path in ("/validate", "/metrics", "/daily-picks/debug?profile_id=p1"):
+    for path in (
+        "/validate",
+        "/digest",
+        "/metrics",
+        "/test-generation",
+        "/test-generation/debug?profile_id=p1",
+    ):
         response = client.get(path)
         assert response.status_code == 404, path
 
@@ -231,7 +256,7 @@ def test_metrics_requires_admin_email(monkeypatch):
     assert response.status_code == 403
 
 
-def test_daily_picks_debug_requires_admin_email(monkeypatch):
+def test_test_generation_debug_requires_admin_email(monkeypatch):
     monkeypatch.setenv("ALLOW_DEBUG_FEATURES", "1")
     monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
     monkeypatch.setattr(
@@ -247,7 +272,7 @@ def test_daily_picks_debug_requires_admin_email(monkeypatch):
     )
     client = TestClient(routes.app)
 
-    response = client.get("/daily-picks/debug?profile_id=profile-1")
+    response = client.get("/test-generation/debug?profile_id=profile-1")
 
     assert response.status_code == 403
 
@@ -340,18 +365,18 @@ def test_magic_link_request_is_rate_limited(monkeypatch, fake_api_uow):
     assert second.status_code == 429
 
 
-def test_daily_picks_generate_is_rate_limited_per_user(monkeypatch, fake_api_uow):
+def test_test_generation_run_is_rate_limited_per_user(monkeypatch, fake_api_uow):
     from fastapi import HTTPException
 
     import api.dependencies as dependencies
-    from api.schemas import GenerateDailyPicksRequest
+    from api.schemas import TestGenerationRequest
 
     monkeypatch.delenv("DISABLE_RATE_LIMIT", raising=False)
     reset_rate_limits()
-    monkeypatch.setenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "1")
+    monkeypatch.setenv("TEST_GENERATION_LIMIT_PER_USER", "1")
     monkeypatch.setattr(
         dependencies,
-        "generate_daily_picks_payload_service",
+        "run_test_generation_payload_service",
         Mock(
             return_value={
                 "user_id": "default",
@@ -364,15 +389,25 @@ def test_daily_picks_generate_is_rate_limited_per_user(monkeypatch, fake_api_uow
                 "needs_generation": False,
                 "picks": [],
                 "sections": [],
+                "email_status": None,
+                "email_error": None,
             }
         ),
     )
 
-    request = GenerateDailyPicksRequest(profile_ids=["profile-1"])
-    dependencies.generate_daily_picks_payload(request, user_id="default")
+    request = TestGenerationRequest(profile_ids=["profile-1"])
+    dependencies.run_test_generation_payload(
+        request,
+        user_id="default",
+        admin_email="admin@example.com",
+    )
 
     with pytest.raises(HTTPException) as exc:
-        dependencies.generate_daily_picks_payload(request, user_id="default")
+        dependencies.run_test_generation_payload(
+            request,
+            user_id="default",
+            admin_email="admin@example.com",
+        )
 
     assert exc.value.status_code == 429
 
@@ -492,9 +527,10 @@ def test_security_headers_are_present(monkeypatch):
 @pytest.mark.parametrize(
     "next_path,email,expected",
     [
-        ("/digest", None, "/digest"),
+        ("/digest", None, "/profiles"),
         ("//evil.example", None, "/profiles"),
         ("/admin", None, "/profiles"),
+        ("/digest", "admin@example.com", "/digest"),
         ("/validate", "admin@example.com", "/validate"),
         ("/validate", "other@example.com", "/profiles"),
         ("/validate", None, "/profiles"),

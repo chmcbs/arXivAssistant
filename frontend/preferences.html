@@ -3,25 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Profiles - arXiv Assistant</title>
-  <link rel="stylesheet" href="/static/styles.css?v=14">
+  <title>Profiles - [NAME]</title>
+  <link rel="stylesheet" href="/static/styles.css?v=18">
 </head>
-<body>
+<body data-document-title="Profiles">
   <header class="topbar">
-    <a class="brand" href="/">arXiv Assistant</a>
+    <div class="brand">[NAME]</div>
     <div class="row">
-      <span id="session-label" class="muted">Checking session...</span>
+      <div class="session-menu">
+        <button type="button" id="session-label" class="session-menu-trigger muted" disabled>
+          Checking session...
+        </button>
+        <div class="session-menu-panel hidden">
+          <button type="button" class="session-logout-btn">Logout?</button>
+        </div>
+      </div>
       <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/digest">Digest</a>
       <a class="link-btn" href="/papers">Papers</a>
+      <a class="link-btn hidden" href="/digest" data-debug-admin>Digest (Dev)</a>
     </div>
   </header>
 
   <main class="container">
     <section id="auth-gate" class="panel hidden">
       <h1>Profiles</h1>
-      <p class="muted">Sign in by email to edit your profiles.</p>
-      <form id="auth-form" class="stack">
+      <p class="muted">Sign in to edit your profiles.</p>
+      <form id="auth-form" class="stack auth-form">
         <label for="auth-email">Email</label>
         <input id="auth-email" type="email" placeholder="you@example.com" required>
         <button type="submit">Send magic link</button>
@@ -57,7 +64,7 @@
         </label>
       </section>
       <div id="profiles-grid" class="profiles-grid"></div>
-      <p class="profiles-order-tip muted">Tip: drag profiles to change their order in your daily digest!</p>
+      <p class="profiles-order-tip muted">Tip: rearrange profiles to change their order in your daily digest!</p>
     </section>
   </main>
 
@@ -109,9 +116,10 @@
     </article>
   </template>
 
+  <script src="/static/site.js"></script>
   <script src="/static/api-client.js"></script>
   <script src="/static/auth-ui.js"></script>
   <script src="/static/format.js"></script>
-  <script src="/static/preferences.js?v=21"></script>
+  <script src="/static/preferences.js?v=22"></script>
 </body>
 </html>

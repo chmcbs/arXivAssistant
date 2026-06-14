@@ -26,6 +26,7 @@ from core.config import (
     get_llm_request_timeout_s,
 )
 from core.db import connection_scope
+from core.arxiv_text import format_arxiv_display_text
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -160,7 +161,8 @@ class LLMProvider(Protocol):
 
 def _clean_sentence(text: str) -> str:
     cleaned = text.strip().strip("\"'")
-    return re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return format_arxiv_display_text(cleaned)
 
 
 class OllamaProvider:

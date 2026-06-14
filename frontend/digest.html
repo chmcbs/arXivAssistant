@@ -3,17 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Daily Digest - arXiv Assistant</title>
-  <link rel="stylesheet" href="/static/styles.css?v=9">
+  <title>Daily Digest - [NAME]</title>
+  <link rel="stylesheet" href="/static/styles.css?v=10">
 </head>
-<body>
+<body data-document-title="Daily Digest">
   <header class="topbar">
-    <a class="brand" href="/">arXiv Assistant</a>
+    <div class="brand">[NAME]</div>
     <div class="row">
-      <span id="session-label" class="muted">Checking session...</span>
+      <div class="session-menu">
+        <button type="button" id="session-label" class="session-menu-trigger muted" disabled>
+          Checking session...
+        </button>
+        <div class="session-menu-panel hidden">
+          <button type="button" class="session-logout-btn">Logout?</button>
+        </div>
+      </div>
       <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/digest">Digest</a>
       <a class="link-btn" href="/papers">Papers</a>
+      <a class="link-btn hidden" href="/digest" data-debug-admin>Digest (Dev)</a>
     </div>
   </header>
 
@@ -50,7 +57,7 @@
         </div>
       </div>
       <p id="digest-status" class="status muted"></p>
-      <h2 class="digest-preview-header">Your daily research digest from arXiv Assistant</h2>
+      <h2 class="digest-preview-header">Your daily research digest from <span class="product-name-slot">[NAME]</span></h2>
       <div class="panel digest-preview-card">
         <div id="sections-wrap" class="digest-sections"></div>
         <div class="digest-feedback-cta">
@@ -59,7 +66,7 @@
         </div>
       </div>
       <p class="digest-preview-disclaimer muted tiny">
-        Not affiliated with arXiv. Papers are sourced from arXiv.org.
+        Papers are sourced from arXiv.org
       </p>
     </section>
   </main>
@@ -74,6 +81,7 @@
     </article>
   </template>
 
+  <script src="/static/site.js"></script>
   <script src="/static/api-client.js"></script>
   <script src="/static/auth-ui.js"></script>
   <script src="/static/format.js"></script>

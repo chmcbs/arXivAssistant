@@ -4,6 +4,7 @@ Load digest sections from recommendations for email delivery
 
 from dataclasses import dataclass
 
+from core.arxiv_text import format_arxiv_display_text
 from core.db import connection_scope
 from core.profiles import get_profile
 
@@ -94,8 +95,8 @@ def build_digest_sections(
                 DigestPick(
                     rank=int(row[0]),
                     arxiv_id=row[1],
-                    title=row[2],
-                    description=row[3],
+                    title=format_arxiv_display_text(row[2]),
+                    description=format_arxiv_display_text(row[3]) if row[3] else None,
                     pdf_url=row[4],
                     final_score=float(row[5]),
                 )

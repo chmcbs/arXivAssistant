@@ -3,36 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>arXiv Assistant</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <title>[NAME]</title>
+  <link rel="stylesheet" href="/static/styles.css?v=18">
 </head>
-<body>
+<body data-document-title="">
   <header class="topbar">
-    <div class="brand">arXiv Assistant</div>
+    <div class="brand">[NAME]</div>
     <div class="row">
       <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/digest">Digest</a>
       <a class="link-btn" href="/papers">Papers</a>
+      <a class="link-btn hidden" href="/digest" data-debug-admin>Digest (Dev)</a>
     </div>
   </header>
 
   <main class="container">
     <section class="hero">
-      <h1>Daily arXiv picks tuned to your profiles</h1>
+      <h1>[HEADING]</h1>
       <p>
-        Stop scanning every paper. Create up to three preference profiles and
-        get one daily digest with profile-specific sections.
+        [SUBHEADING]
       </p>
     </section>
 
-    <section class="panel">
-      <h2>Get started by email</h2>
+    <section class="panel landing-signup">
+      <h2>Enter your email to get started</h2>
       <form id="signup-form" class="stack">
         <label for="email">Email</label>
         <input id="email" type="email" placeholder="you@example.com" required>
         <button type="submit">Send magic link</button>
       </form>
-      <p id="signup-status" class="status muted">Enter your email to continue.</p>
+      <p id="signup-status" class="status muted"></p>
       <p id="signup-link-wrap" class="hidden">
         Dev magic link:
         <a id="signup-link" href="#">open profiles</a>
@@ -40,7 +39,8 @@
     </section>
   </main>
 
+  <script src="/static/site.js"></script>
   <script src="/static/api-client.js"></script>
-  <script src="/static/landing.js"></script>
-</body>
+  <script src="/static/auth-ui.js"></script>
+  <script src="/static/landing.js"></script></body>
 </html>

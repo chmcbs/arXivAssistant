@@ -11,7 +11,7 @@ form.addEventListener("submit", async (event) => {
   try {
     const payload = await apiRequest("/auth/magic-link/request", "POST", { email });
     if (payload.magic_link) {
-      statusEl.textContent = "Dev mode: use the link below to sign in.";
+      statusEl.textContent = "Check your inbox for the confirmation link.";
       linkEl.href = payload.magic_link;
       linkWrap.classList.remove("hidden");
     } else {

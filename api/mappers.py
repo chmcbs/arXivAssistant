@@ -5,15 +5,17 @@ Mapping for query rows and API payload fragments
 from api.queries.daily_picks import DailyPickRow
 from api.queries.metrics import LatestRunRow, MetricsRowSet
 from api.queries.profiles import ProfileSummaryRow
+from core.arxiv_text import format_arxiv_display_text
 
 
 def to_public_pick(row: DailyPickRow) -> dict:
+    description = row.description
     return {
         "rank": row.rank,
         "arxiv_id": row.arxiv_id,
-        "title": row.title,
-        "abstract": row.abstract,
-        "description": row.description,
+        "title": format_arxiv_display_text(row.title),
+        "abstract": format_arxiv_display_text(row.abstract),
+        "description": format_arxiv_display_text(description) if description else None,
         "pdf_url": row.pdf_url,
         "final_score": row.final_score,
     }

@@ -45,10 +45,10 @@ def test_feedback_hub_route_returns_sections(monkeypatch):
     assert body["liked"] == []
 
 
-def test_daily_picks_generate_progress_route_returns_snapshot(monkeypatch):
+def test_test_generation_progress_route_returns_snapshot(monkeypatch):
     monkeypatch.setattr(
         routes,
-        "get_generate_daily_picks_progress_payload",
+        "get_test_generation_progress_payload",
         Mock(
             return_value={
                 "active": True,
@@ -61,7 +61,7 @@ def test_daily_picks_generate_progress_route_returns_snapshot(monkeypatch):
     )
 
     client = TestClient(routes.app)
-    response = client.get("/daily-picks/generate/progress")
+    response = client.get("/test-generation/progress")
 
     assert response.status_code == 200
     body = response.json()
@@ -72,10 +72,10 @@ def test_daily_picks_generate_progress_route_returns_snapshot(monkeypatch):
     assert body["updated_at"].startswith("2026-05-27T12:00:00")
 
 
-def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypatch):
+def test_test_generation_run_route_returns_200_with_generation_status(monkeypatch):
     monkeypatch.setattr(
         routes,
-        "generate_daily_picks_payload",
+        "run_test_generation_payload",
         Mock(
             return_value={
                 "user_id": "default",
@@ -133,7 +133,7 @@ def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypat
 
     client = TestClient(routes.app)
     response = client.post(
-        "/daily-picks/generate",
+        "/test-generation/run",
         json={
             "profile_ids": ["profile-1"],
             "max_results": 123,
@@ -148,10 +148,10 @@ def test_daily_picks_generate_route_returns_200_with_generation_status(monkeypat
     assert payload["generation_runs"][0]["profile_statuses"][0]["status"] == "succeeded"
 
 
-def test_daily_picks_generate_route_returns_500_for_internal_failure(monkeypatch):
+def test_test_generation_run_route_returns_500_for_internal_failure(monkeypatch):
     monkeypatch.setattr(
         routes,
-        "generate_daily_picks_payload",
+        "run_test_generation_payload",
         Mock(
             side_effect=routes.HTTPException(
                 status_code=500,
@@ -162,7 +162,7 @@ def test_daily_picks_generate_route_returns_500_for_internal_failure(monkeypatch
 
     client = TestClient(routes.app)
     response = client.post(
-        "/daily-picks/generate",
+        "/test-generation/run",
         json={
             "profile_ids": ["profile-1"],
             "max_results": 123,
@@ -234,8 +234,18 @@ def test_validate_route_returns_internal_validation_ui():
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Validation UI" in response.text
-    assert "POST /daily-picks/generate" in response.text
+    assert "POST /test-generation/run" in response.text
     assert "Profile Keywords" in response.text
+
+
+def test_site_config_route_returns_product_name(monkeypatch):
+    monkeypatch.setenv("PRODUCT_NAME", "Paper Radar")
+    client = TestClient(routes.app)
+
+    response = client.get("/site-config")
+
+    assert response.status_code == 200
+    assert response.json() == {"product_name": "Paper Radar"}
 
 
 def test_landing_profiles_and_digest_pages_are_served():
@@ -248,15 +258,15 @@ def test_landing_profiles_and_digest_pages_are_served():
     papers = client.get("/papers")
 
     assert landing.status_code == 200
-    assert "<title>arXiv Assistant</title>" in landing.text
+    assert "<title>[NAME]</title>" in landing.text
     assert profiles.status_code == 200
-    assert "<title>Profiles - arXiv Assistant</title>" in profiles.text
+    assert "<title>Profiles - [NAME]</title>" in profiles.text
     assert preferences_redirect.status_code == 307
     assert preferences_redirect.headers["location"] == "/profiles"
     assert digest.status_code == 200
-    assert "<title>Daily Digest - arXiv Assistant</title>" in digest.text
+    assert "<title>Daily Digest - [NAME]</title>" in digest.text
     assert papers.status_code == 200
-    assert "<title>Papers - arXiv Assistant</title>" in papers.text
+    assert "<title>Papers - [NAME]</title>" in papers.text
 
 
 def test_magic_link_request_route_returns_payload(monkeypatch):
@@ -298,7 +308,8 @@ def test_magic_link_verify_sets_session_cookie_and_redirects(monkeypatch):
     assert "session_id=session-123" in response.headers["set-cookie"]
 
 
-def test_magic_link_verify_supports_safe_next_redirect(monkeypatch):
+def test_magic_link_verify_supports_safe_next_redirect_for_admin(monkeypatch):
+    monkeypatch.setenv("DEBUG_ADMIN_EMAILS", "admin@example.com")
     monkeypatch.setattr(
         routes,
         "verify_magic_link_payload",
@@ -306,8 +317,8 @@ def test_magic_link_verify_supports_safe_next_redirect(monkeypatch):
             return_value={
                 "verified": True,
                 "session_id": "session-456",
-                "user_id": "x@example.com",
-                "email": "x@example.com",
+                "user_id": "admin@example.com",
+                "email": "admin@example.com",
             }
         ),
     )

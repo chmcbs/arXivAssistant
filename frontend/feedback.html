@@ -3,25 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Papers - arXiv Assistant</title>
-  <link rel="stylesheet" href="/static/styles.css?v=12">
+  <title>Papers - [NAME]</title>
+  <link rel="stylesheet" href="/static/styles.css?v=19">
 </head>
-<body>
+<body data-document-title="Papers">
   <header class="topbar">
-    <a class="brand" href="/">arXiv Assistant</a>
+    <div class="brand">[NAME]</div>
     <div class="row">
-      <span id="session-label" class="muted">Checking session...</span>
+      <div class="session-menu">
+        <button type="button" id="session-label" class="session-menu-trigger muted" disabled>
+          Checking session...
+        </button>
+        <div class="session-menu-panel hidden">
+          <button type="button" class="session-logout-btn">Logout?</button>
+        </div>
+      </div>
       <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/digest">Digest</a>
       <a class="link-btn" href="/papers">Papers</a>
+      <a class="link-btn hidden" href="/digest" data-debug-admin>Digest (Dev)</a>
     </div>
   </header>
 
   <main class="container">
     <section id="auth-gate" class="panel hidden">
       <h1>Papers</h1>
-      <p class="muted">Sign in by email to view papers from your digests and manage likes and dislikes.</p>
-      <form id="auth-form" class="stack">
+      <p class="muted">Sign in to view papers.</p>
+      <form id="auth-form" class="stack auth-form">
         <label for="auth-email">Email</label>
         <input id="auth-email" type="email" placeholder="you@example.com" required>
         <button type="submit">Send magic link</button>
@@ -35,7 +42,7 @@
 
     <section id="feedback-app" class="hidden">
       <h1>Papers</h1>
-      <p class="muted feedback-hub-intro">Rate papers to improve recommendation quality</p>
+      <p class="muted feedback-hub-intro">Rate papers to improve recommendation quality.</p>
       <div class="feedback-hub-filters">
         <div class="feedback-profile-filter">
           <span class="feedback-profile-filter-label">Profiles</span>
@@ -47,6 +54,9 @@
         </div>
       </div>
       <p id="feedback-status" class="status muted"></p>
+      <p id="feedback-hub-empty" class="muted feedback-hub-empty-state hidden">
+        Nothing here yet. Papers from your daily digest will show up here.
+      </p>
       <div class="feedback-hub-layout">
         <nav class="feedback-hub-nav" aria-label="Paper sections">
           <a class="feedback-hub-nav-link is-active" href="#feedback-feed">Feed</a>
@@ -55,29 +65,53 @@
         </nav>
         <div class="feedback-hub-stack">
           <div id="feedback-feed" class="panel feedback-hub-column">
-            <h2>🆕 Feed</h2>
-            <div id="feed-list" class="feedback-hub-list"></div>
+            <button
+              type="button"
+              class="feedback-hub-toggle"
+              aria-expanded="true"
+              aria-controls="feed-list"
+            >
+              <span class="feedback-hub-toggle-label">🆕 Feed</span>
+              <span class="feedback-hub-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div id="feed-list" class="feedback-hub-list feedback-hub-panel-body"></div>
           </div>
           <div id="feedback-liked" class="panel feedback-hub-column">
-            <h2>👍 Liked</h2>
-            <div id="liked-list" class="feedback-hub-list"></div>
+            <button
+              type="button"
+              class="feedback-hub-toggle"
+              aria-expanded="true"
+              aria-controls="liked-list"
+            >
+              <span class="feedback-hub-toggle-label">👍 Liked</span>
+              <span class="feedback-hub-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div id="liked-list" class="feedback-hub-list feedback-hub-panel-body"></div>
           </div>
           <div id="feedback-disliked" class="panel feedback-hub-column">
-            <h2>👎 Disliked</h2>
-            <div id="disliked-list" class="feedback-hub-list"></div>
+            <button
+              type="button"
+              class="feedback-hub-toggle"
+              aria-expanded="true"
+              aria-controls="disliked-list"
+            >
+              <span class="feedback-hub-toggle-label">👎 Disliked</span>
+              <span class="feedback-hub-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div id="disliked-list" class="feedback-hub-list feedback-hub-panel-body"></div>
           </div>
         </div>
       </div>
       <p class="muted feedback-hub-footer">
-        <a class="link-btn" href="/digest">Back to digest preview</a>
         <a class="link-btn" href="/profiles">Profiles</a>
       </p>
     </section>
   </main>
 
+  <script src="/static/site.js"></script>
   <script src="/static/api-client.js"></script>
   <script src="/static/auth-ui.js"></script>
   <script src="/static/format.js"></script>
-  <script src="/static/feedback.js?v=14"></script>
+  <script src="/static/feedback.js?v=17"></script>
 </body>
 </html>

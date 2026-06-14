@@ -7,7 +7,7 @@ from html import escape
 
 from email.message import EmailMessage
 
-from core.config import get_app_base_url, get_email_from, is_email_delivery_configured
+from core.config import get_app_base_url, get_email_from, get_product_name, is_email_delivery_configured
 from core.digest_content import (
     DigestPick,
     DigestSection,
@@ -20,7 +20,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-PRODUCT_NAME = "arXiv Assistant"
+PAPERS_SOURCED_DISCLAIMER = "Papers are sourced from arXiv.org"
 
 CTA_BUTTON_STYLE = (
     "display:inline-block;background:#111827;color:#ffffff;text-decoration:none;"
@@ -99,7 +99,7 @@ def build_digest_email_body(
     )
 
     lines = [
-        f"Your daily research digest from {PRODUCT_NAME}",
+        f"Your daily research digest from {get_product_name()}",
         "",
     ]
 
@@ -117,9 +117,8 @@ def build_digest_email_body(
             "---",
             f"Rate papers: {feedback_url}",
             f"Manage preferences: {preferences_url}",
+            PAPERS_SOURCED_DISCLAIMER,
             f"Unsubscribe: {resolved_unsubscribe_url}",
-            "",
-            "Not affiliated with arXiv. Papers are sourced from arXiv.org.",
         ]
     )
     return "\n".join(lines)
@@ -200,7 +199,7 @@ def build_digest_email_html(
         )
 
     header = (
-        f"Your daily research digest from {escape(PRODUCT_NAME)}"
+        f"Your daily research digest from {escape(get_product_name())}"
     )
     header_block = (
         f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
@@ -220,18 +219,18 @@ def build_digest_email_html(
         f"Manage preferences</a>"
         f"</div>"
     )
+    disclaimer = (
+        '<p style="margin:16px 0 0;font-size:12px;color:#6b7280;line-height:1.5;'
+        'text-align:center;">'
+        f"{escape(PAPERS_SOURCED_DISCLAIMER)}"
+        "</p>"
+    )
     footer_links = (
-        f'<p style="margin:16px 0 0;font-size:12px;color:#6b7280;line-height:1.5;'
+        f'<p style="margin:8px 0 0;font-size:12px;color:#6b7280;line-height:1.5;'
         f'text-align:center;">'
         f'<a href="{escape(resolved_unsubscribe_url, quote=True)}" '
         f'style="color:#6b7280;">Unsubscribe from digest emails</a>'
         f"</p>"
-    )
-    disclaimer = (
-        '<p style="margin:8px 0 0;font-size:12px;color:#6b7280;line-height:1.5;'
-        'text-align:center;">'
-        "Not affiliated with arXiv. Papers are sourced from arXiv.org."
-        "</p>"
     )
 
     return f"""<!DOCTYPE html>
@@ -248,8 +247,8 @@ def build_digest_email_html(
       {"".join(section_blocks)}
       {cta_block}
     </div>
-    {footer_links}
     {disclaimer}
+    {footer_links}
   </div>
 </body>
 </html>"""
@@ -282,6 +281,7 @@ def deliver_digest_email_for_user(
     user_id: str,
     profile_ids: list[str],
     run_ids: list[str],
+    to_email: str | None = None,
     conn=None,
 ) -> dict:
     if not is_email_delivery_configured():
@@ -315,6 +315,7 @@ def deliver_digest_email_for_user(
     ensure_email_settings(user_id, conn=conn)
     unsubscribe_url = build_unsubscribe_url(user_id)
 
+    recipient = (to_email or user_id).strip()
     subject = build_digest_email_subject()
     plain_body = build_digest_email_body(
         sections,
@@ -327,7 +328,7 @@ def deliver_digest_email_for_user(
 
     try:
         send_digest_email(
-            to_email=user_id,
+            to_email=recipient,
             subject=subject,
             plain_body=plain_body,
             html_body=html_body,
@@ -352,6 +353,8 @@ def deliver_digest_email_for_user(
         extra={
             "event": "digest.email.sent",
             "user_id": user_id,
+            "to_email": recipient,
+            "redirected_recipient": recipient.lower() != user_id.strip().lower(),
             "profile_ids": profile_ids,
             "run_ids": run_ids,
             "pick_count": count_digest_picks(sections),

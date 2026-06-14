@@ -7,6 +7,16 @@ import pytest
 from core import config
 
 
+def test_get_product_name_defaults_to_placeholder(monkeypatch):
+    monkeypatch.delenv("PRODUCT_NAME", raising=False)
+    assert config.get_product_name() == "[NAME]"
+
+
+def test_get_product_name_uses_environment(monkeypatch):
+    monkeypatch.setenv("PRODUCT_NAME", "Paper Radar")
+    assert config.get_product_name() == "Paper Radar"
+
+
 def test_get_arxiv_categories_uses_default(monkeypatch):
     monkeypatch.delenv("ARXIV_CATEGORIES", raising=False)
 
@@ -114,11 +124,11 @@ def test_get_smtp_use_starttls_defaults_off_for_mailpit_port(monkeypatch):
 def test_pipeline_limit_getters_use_environment(monkeypatch):
     monkeypatch.setenv("INGESTION_MAX_RESULTS", "200")
     monkeypatch.setenv("EMBEDDING_LIMIT", "900")
-    monkeypatch.setenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "7")
+    monkeypatch.setenv("TEST_GENERATION_LIMIT_PER_USER", "7")
 
     assert config.get_ingestion_max_results() == 200
     assert config.get_embedding_limit() == 900
-    assert config.get_daily_picks_generate_limit_per_user() == 7
+    assert config.get_test_generation_limit_per_user() == 7
 
 
 def test_llm_config_getters_use_environment(monkeypatch):

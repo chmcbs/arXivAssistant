@@ -1,5 +1,5 @@
 """
-Service functions for daily picks and feedback workflows
+Service functions for admin-only test digest generation and preview
 """
 
 from typing import Callable
@@ -7,9 +7,10 @@ from typing import Callable
 from api.mappers import to_debug_pick, to_public_pick
 from api.services.errors import BadRequestError, InternalServerError
 from core.digest_email import deliver_digest_email_for_user
+from core.security import is_debug_admin_email
 
 
-def get_daily_picks_payload(
+def get_test_generation_payload(
     user_id: str,
     profile_id: str | None,
     resolve_profile: Callable[[str, str | None], dict],
@@ -32,7 +33,6 @@ def get_daily_picks_payload(
         profile = resolve_profile(user_id=user_id, profile_id=target_profile_id)
         resolved_profile_id = str(profile["profile_id"])
         rows = fetch_latest_picks(resolved_profile_id)
-        # If the caller anchored to specific run IDs, generation already happened for this response.
         section_needs_generation = not rows and not has_anchor_runs
         section_payload = {
             "profile_id": resolved_profile_id,
@@ -57,7 +57,7 @@ def get_daily_picks_payload(
     }
 
 
-def get_debug_daily_picks_payload(
+def get_test_generation_debug_payload(
     user_id: str,
     profile_id: str | None,
     resolve_profile: Callable[[str, str | None], dict],
@@ -85,13 +85,17 @@ def get_debug_daily_picks_payload(
     return payload
 
 
-def generate_daily_picks_payload(
+def run_test_generation_payload(
     request,
     user_id: str,
+    admin_email: str,
     resolve_profile: Callable[[str, str | None], dict],
     run_pipeline: Callable[..., dict],
-    get_daily_picks_payload: Callable[[str, str | None], dict],
+    get_test_generation_payload: Callable[[str, str | None], dict],
 ) -> dict:
+    if not is_debug_admin_email(admin_email):
+        raise InternalServerError("test generation email is restricted to admin emails")
+
     target_profile_ids = list(dict.fromkeys(request.profile_ids))
     for target_profile_id in target_profile_ids:
         resolve_profile(user_id=user_id, profile_id=target_profile_id)
@@ -102,7 +106,7 @@ def generate_daily_picks_payload(
         max_results=request.max_results,
         embedding_limit=request.embedding_limit,
     )
-    picks_payload = get_daily_picks_payload(
+    picks_payload = get_test_generation_payload(
         user_id=user_id,
         profile_id=None,
         run_ids=summary["run_ids"],
@@ -158,11 +162,13 @@ def generate_daily_picks_payload(
             "NO_SUCCESSFUL_GENERATION: generation failed for all run/profile targets"
         )
 
+    email_result = None
     if summary["run_ids"] and not picks_payload["needs_generation"]:
-        deliver_digest_email_for_user(
+        email_result = deliver_digest_email_for_user(
             user_id=user_id,
             profile_ids=target_profile_ids,
             run_ids=summary["run_ids"],
+            to_email=admin_email,
         )
 
     return {
@@ -176,4 +182,6 @@ def generate_daily_picks_payload(
         "needs_generation": picks_payload["needs_generation"],
         "picks": picks_payload["picks"],
         "sections": picks_payload["sections"],
+        "email_status": email_result["status"] if email_result else None,
+        "email_error": email_result["error_message"] if email_result else None,
     }

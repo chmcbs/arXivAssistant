@@ -15,11 +15,11 @@ from api.dependencies import (
     debug_reset_digest_data_payload,
     debug_reset_profile_data_payload,
     delete_profile_payload,
-    generate_daily_picks_payload,
-    get_generate_daily_picks_progress_payload,
+    get_test_generation_debug_payload,
+    get_test_generation_payload,
+    get_test_generation_progress_payload,
     get_auth_session_payload,
-    get_daily_picks_payload,
-    get_debug_daily_picks_payload,
+    run_test_generation_payload,
     get_email_settings_payload,
     get_feedback_hub_payload,
     get_metrics_payload,
@@ -49,8 +49,11 @@ from api.schemas import (
     CreateProfileRequest,
     CreateProfileResponse,
     CronDailyDigestResponse,
-    DailyPicksResponse,
-    DebugDailyPicksResponse,
+    TestGenerationDebugResponse,
+    TestGenerationProgressResponse,
+    TestGenerationRequest,
+    TestGenerationResponse,
+    TestGenerationRunResponse,
     DebugDigestDataResetResponse,
     DebugProfileDataResetResponse,
     FeedbackRequest,
@@ -60,9 +63,6 @@ from api.schemas import (
     RemoveFeedbackResponse,
     DeletePaperRequest,
     DeletePaperResponse,
-    GenerateDailyPicksRequest,
-    GenerateDailyPicksProgressResponse,
-    GenerateDailyPicksResponse,
     ListProfilesResponse,
     ManageProfileKeywordRequest,
     ManageProfileKeywordResponse,
@@ -78,7 +78,7 @@ from api.schemas import (
     EmailSettingsResponse,
     UpdateEmailSettingsRequest,
 )
-from core.config import get_arxiv_category_options, is_app_https, is_production
+from core.config import get_arxiv_category_options, get_product_name, is_app_https, is_production
 from core.db import check_database_connection
 from core.logging import configure_logging
 from core.security import (
@@ -102,7 +102,7 @@ async def _app_lifespan(_app: FastAPI):
 
 _docs_url = None if is_production() else "/docs"
 app = FastAPI(
-    title="Research Digest API",
+    title=f"{get_product_name()} API",
     docs_url=_docs_url,
     redoc_url=_docs_url,
     openapi_url=None if is_production() else "/openapi.json",
@@ -174,7 +174,8 @@ def preferences_page_redirect() -> RedirectResponse:
 
 
 @app.get("/digest", response_class=FileResponse)
-def digest_page() -> FileResponse:
+def digest_page(request: Request) -> FileResponse:
+    require_debug_admin(request)
     return FileResponse(frontend_dir / "digest.html")
 
 
@@ -210,6 +211,11 @@ def email_unsubscribe(token: str) -> RedirectResponse:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.get("/site-config")
+def site_config() -> dict:
+    return {"product_name": get_product_name()}
 
 
 @app.get("/categories")
@@ -274,50 +280,57 @@ def auth_session(request: Request, response: Response) -> dict:
 
 
 ########################################
-############# DAILY PICKS ##############
+########## TEST GENERATION #############
 ########################################
 
-@app.get("/daily-picks", response_model=DailyPicksResponse)
-def daily_picks(
+@app.get("/test-generation", response_model=TestGenerationResponse)
+def test_generation(
     request: Request,
     profile_id: str | None = None,
 ) -> dict:
+    require_debug_admin(request)
     user_id = require_authenticated_user_id(request)
-    return get_daily_picks_payload(
+    return get_test_generation_payload(
         user_id=user_id,
         profile_id=profile_id,
     )
 
 
-@app.get("/daily-picks/debug", response_model=DebugDailyPicksResponse)
-def daily_picks_debug(
+@app.get("/test-generation/debug", response_model=TestGenerationDebugResponse)
+def test_generation_debug(
     request: Request,
     profile_id: str,
 ) -> dict:
     require_debug_admin(request)
     user_id = require_authenticated_user_id(request)
-    return get_debug_daily_picks_payload(
+    return get_test_generation_debug_payload(
         user_id=user_id,
         profile_id=profile_id,
     )
 
 
 @app.get(
-    "/daily-picks/generate/progress",
-    response_model=GenerateDailyPicksProgressResponse,
+    "/test-generation/progress",
+    response_model=TestGenerationProgressResponse,
 )
-def daily_picks_generate_progress(request: Request) -> dict:
+def test_generation_progress(request: Request) -> dict:
+    require_debug_admin(request)
     user_id = require_authenticated_user_id(request)
-    return get_generate_daily_picks_progress_payload(user_id)
+    return get_test_generation_progress_payload(user_id)
 
 
-@app.post("/daily-picks/generate", response_model=GenerateDailyPicksResponse)
-def daily_picks_generate(
-    body: GenerateDailyPicksRequest,
+@app.post("/test-generation/run", response_model=TestGenerationRunResponse)
+def test_generation_run(
+    body: TestGenerationRequest,
     request: Request,
 ) -> dict:
+    admin_email = require_debug_admin(request)
     user_id = require_authenticated_user_id(request)
-    return generate_daily_picks_payload(body, user_id=user_id)
+    return run_test_generation_payload(
+        body,
+        user_id=user_id,
+        admin_email=admin_email,
+    )
 
 
 @app.post("/debug/digest-data/reset", response_model=DebugDigestDataResetResponse)

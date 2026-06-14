@@ -5,12 +5,13 @@ Service functions for the feedback hub endpoint
 from typing import Callable
 
 from api.queries.feedback_hub import UserPaperHistoryRow
+from core.arxiv_text import format_arxiv_display_text
 
 
 def _to_paper_payload(row: UserPaperHistoryRow) -> dict:
     return {
         "arxiv_id": row.arxiv_id,
-        "title": row.title,
+        "title": format_arxiv_display_text(row.title),
         "pdf_url": row.pdf_url,
         "profile_id": row.profile_id,
         "profile_name": row.profile_name,

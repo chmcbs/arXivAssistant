@@ -1,3 +1,5 @@
+const SHOW_PAPER_DELETE_BUTTON = false;
+
 const authGate = document.getElementById("auth-gate");
 const feedbackApp = document.getElementById("feedback-app");
 const authStatus = document.getElementById("auth-status");
@@ -11,7 +13,21 @@ const dislikedList = document.getElementById("disliked-list");
 const profileFilterChips = document.getElementById("profile-filter-chips");
 const dateFilterChips = document.getElementById("date-filter-chips");
 const feedbackNavLinks = Array.from(document.querySelectorAll(".feedback-hub-nav-link"));
+const feedbackHubLayout = document.querySelector(".feedback-hub-layout");
+const feedbackHubNav = document.querySelector(".feedback-hub-nav");
+const feedbackHubEmpty = document.getElementById("feedback-hub-empty");
 const feedbackSectionIds = ["feedback-feed", "feedback-liked", "feedback-disliked"];
+const FEEDBACK_SECTIONS = [
+  { id: "feedback-feed", key: "seen", listEl: feedList, emptyText: "Nothing in your feed yet.", section: "feed" },
+  { id: "feedback-liked", key: "liked", listEl: likedList, emptyText: "No likes yet.", section: "liked" },
+  {
+    id: "feedback-disliked",
+    key: "disliked",
+    listEl: dislikedList,
+    emptyText: "No dislikes yet.",
+    section: "disliked",
+  },
+];
 
 const DATE_FILTER_OPTIONS = [
   { id: "all", label: "All time" },
@@ -223,7 +239,9 @@ function renderList(container, items, emptyText, section) {
     const actions = document.createElement("div");
     actions.className = "feedback-hub-entry-actions";
     actions.appendChild(createVoteButtons(item, section));
-    actions.appendChild(createDeleteButton(item));
+    if (SHOW_PAPER_DELETE_BUTTON) {
+      actions.appendChild(createDeleteButton(item));
+    }
     footer.appendChild(actions);
 
     main.appendChild(title);
@@ -233,28 +251,80 @@ function renderList(container, items, emptyText, section) {
   });
 }
 
+function getUnfilteredSectionItems(key) {
+  if (!hubPayload) {
+    return [];
+  }
+  return hubPayload[key] || [];
+}
+
+function getFilteredSectionItems(key) {
+  return filterItems(getUnfilteredSectionItems(key));
+}
+
+function countTotalPapers() {
+  if (!hubPayload) {
+    return 0;
+  }
+  return (
+    getUnfilteredSectionItems("seen").length +
+    getUnfilteredSectionItems("liked").length +
+    getUnfilteredSectionItems("disliked").length
+  );
+}
+
+function updateHubLayout() {
+  if (!hubPayload || !feedbackHubLayout || !feedbackHubNav) {
+    return;
+  }
+
+  const showNavByVolume = countTotalPapers() > 9;
+
+  if (feedbackHubEmpty) {
+    feedbackHubEmpty.classList.toggle("hidden", countTotalPapers() > 0);
+  }
+
+  FEEDBACK_SECTIONS.forEach(({ id, key }) => {
+    const section = document.getElementById(id);
+    if (!section) {
+      return;
+    }
+    const hasPapers = getUnfilteredSectionItems(key).length > 0;
+    section.classList.toggle("hidden", !hasPapers);
+  });
+
+  feedbackNavLinks.forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const sectionDef = FEEDBACK_SECTIONS.find((entry) => "#" + entry.id === href);
+    const showLink =
+      showNavByVolume &&
+      sectionDef &&
+      getFilteredSectionItems(sectionDef.key).length > 0;
+    link.classList.toggle("hidden", !showLink);
+  });
+
+  const anyNavLinkVisible = feedbackNavLinks.some((link) => !link.classList.contains("hidden"));
+  const showNav = showNavByVolume && anyNavLinkVisible;
+  feedbackHubNav.classList.toggle("hidden", !showNav);
+  feedbackHubLayout.classList.toggle("is-nav-hidden", !showNav);
+
+  if (showNav) {
+    const firstVisible = feedbackNavLinks.find((link) => !link.classList.contains("hidden"));
+    if (firstVisible) {
+      const href = firstVisible.getAttribute("href") || "";
+      setActiveNavLink(href.slice(1));
+    }
+  }
+}
+
 function applyFilters() {
   if (!hubPayload) {
     return;
   }
-  renderList(
-    feedList,
-    filterItems(hubPayload.seen || []),
-    "Nothing in your feed yet.",
-    "feed",
-  );
-  renderList(
-    likedList,
-    filterItems(hubPayload.liked || []),
-    "No likes yet.",
-    "liked",
-  );
-  renderList(
-    dislikedList,
-    filterItems(hubPayload.disliked || []),
-    "No dislikes yet.",
-    "disliked",
-  );
+  FEEDBACK_SECTIONS.forEach(({ listEl, key, emptyText, section }) => {
+    renderList(listEl, getFilteredSectionItems(key), emptyText, section);
+  });
+  updateHubLayout();
 }
 
 function renderProfileFilter() {
@@ -362,10 +432,38 @@ async function init() {
       return;
     }
     setupFeedbackNavigation();
+    setupSectionToggles();
     await loadFeedbackHub();
   } catch (error) {
     setStatus(String(error.message || error), true);
   }
+}
+
+function setSectionExpanded(sectionId, expanded) {
+  const section = document.getElementById(sectionId);
+  if (!section) {
+    return;
+  }
+  section.classList.toggle("is-collapsed", !expanded);
+  const toggle = section.querySelector(".feedback-hub-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+}
+
+function setupSectionToggles() {
+  feedbackSectionIds.forEach((sectionId) => {
+    const section = document.getElementById(sectionId);
+    const toggle = section && section.querySelector(".feedback-hub-toggle");
+    if (!toggle) {
+      return;
+    }
+    toggle.addEventListener("click", () => {
+      section.classList.toggle("is-collapsed");
+      const expanded = !section.classList.contains("is-collapsed");
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    });
+  });
 }
 
 function setActiveNavLink(sectionId) {
@@ -389,6 +487,7 @@ function setupFeedbackNavigation() {
         return;
       }
       event.preventDefault();
+      setSectionExpanded(target.id, true);
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       setActiveNavLink(target.id);
       history.replaceState(null, "", href);

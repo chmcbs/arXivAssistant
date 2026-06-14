@@ -84,6 +84,11 @@ def get_keyword_boost_cap() -> float:
 
 
 # URLs
+def get_product_name() -> str:
+    raw = os.getenv("PRODUCT_NAME", "").strip()
+    return raw or "[NAME]"
+
+
 def get_app_base_url() -> str:
     return os.getenv("APP_BASE_URL", "http://localhost:8000")
 
@@ -158,7 +163,10 @@ def get_rate_limit_window_seconds() -> int:
     return max(60, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600")))
 
 
-def get_daily_picks_generate_limit_per_user() -> int:
+def get_test_generation_limit_per_user() -> int:
+    raw = os.getenv("TEST_GENERATION_LIMIT_PER_USER", "").strip()
+    if raw:
+        return max(1, int(raw))
     return max(1, int(os.getenv("DAILY_PICKS_GENERATE_LIMIT_PER_USER", "5")))
 
 

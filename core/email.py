@@ -7,6 +7,7 @@ from email.message import EmailMessage
 
 from core.config import (
     get_email_from,
+    get_product_name,
     get_smtp_host,
     get_smtp_password,
     get_smtp_port,
@@ -52,7 +53,7 @@ def send_magic_link_email(to_email: str, magic_link: str) -> None:
         raise EmailDeliveryError("email delivery is not configured")
 
     message = EmailMessage()
-    message["Subject"] = "Sign in to arXiv Assistant"
+    message["Subject"] = f"Sign in to {get_product_name()}"
     message["From"] = get_email_from()
     message["To"] = to_email
     message.set_content(

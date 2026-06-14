@@ -16,7 +16,7 @@ from api.schemas import (
     FeedbackRequest,
     RemoveFeedbackRequest,
     DeletePaperRequest,
-    GenerateDailyPicksRequest,
+    TestGenerationRequest,
     ManageProfileKeywordRequest,
     RequestMagicLinkRequest,
     UpdateProfileRequest,
@@ -29,10 +29,10 @@ from api.services.auth import (
     verify_magic_link_payload as verify_magic_link_payload_service,
 )
 from api.services.common import resolve_profile
-from api.services.daily_picks import (
-    generate_daily_picks_payload as generate_daily_picks_payload_service,
-    get_daily_picks_payload as get_daily_picks_payload_service,
-    get_debug_daily_picks_payload as get_debug_daily_picks_payload_service,
+from api.services.test_generation import (
+    get_test_generation_debug_payload as get_test_generation_debug_payload_service,
+    get_test_generation_payload as get_test_generation_payload_service,
+    run_test_generation_payload as run_test_generation_payload_service,
 )
 from api.services.feedback import (
     remove_feedback_payload as remove_feedback_payload_service,
@@ -69,7 +69,7 @@ from core.auth import (
 )
 from core.config import (
     get_app_base_url,
-    get_daily_picks_generate_limit_per_user,
+    get_test_generation_limit_per_user,
     get_magic_link_request_limit_per_email,
     get_magic_link_request_limit_per_ip,
     get_magic_link_verify_limit_per_ip,
@@ -192,10 +192,10 @@ def _enforce_magic_link_verify_limit(client_ip: str) -> None:
     )
 
 
-def _enforce_daily_picks_generate_limit(user_id: str) -> None:
+def _enforce_test_generation_limit(user_id: str) -> None:
     check_rate_limit(
-        f"daily-picks-generate:user:{user_id.strip().lower()}",
-        max_attempts=get_daily_picks_generate_limit_per_user(),
+        f"test-generation:user:{user_id.strip().lower()}",
+        max_attempts=get_test_generation_limit_per_user(),
         window_seconds=get_rate_limit_window_seconds(),
     )
 
@@ -245,7 +245,7 @@ def _resolve_profile(user_id: str, profile_id: str | None, conn=None) -> dict:
 
 
 ########################################
-############ DAILY PICKS ###############
+########## TEST GENERATION #############
 ########################################
 
 def _fetch_latest_picks(profile_id: str, run_ids: list[str] | None = None, conn=None):
@@ -258,7 +258,7 @@ def _fetch_latest_picks(profile_id: str, run_ids: list[str] | None = None, conn=
     )
 
 
-def get_daily_picks_payload(
+def get_test_generation_payload(
     user_id: str,
     profile_id: str | None = None,
     run_ids: list[str] | None = None,
@@ -267,7 +267,7 @@ def get_daily_picks_payload(
 ) -> dict:
     try:
         with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
-            return get_daily_picks_payload_service(
+            return get_test_generation_payload_service(
                 user_id=user_id,
                 profile_id=profile_id,
                 anchored_run_ids=run_ids,
@@ -290,7 +290,7 @@ def get_daily_picks_payload(
         raise _to_http_exception(error) from error
 
 
-def get_debug_daily_picks_payload(
+def get_test_generation_debug_payload(
     user_id: str,
     profile_id: str | None = None,
     uow: ApiUnitOfWork | None = None,
@@ -298,7 +298,7 @@ def get_debug_daily_picks_payload(
 ) -> dict:
     try:
         with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
-            return get_debug_daily_picks_payload_service(
+            return get_test_generation_debug_payload_service(
                 user_id=user_id,
                 profile_id=profile_id,
                 resolve_profile=lambda user_id, profile_id: _resolve_profile(
@@ -315,24 +315,22 @@ def get_debug_daily_picks_payload(
         raise _to_http_exception(error) from error
 
 
-def get_generate_daily_picks_progress_payload(user_id: str) -> dict:
+def get_test_generation_progress_payload(user_id: str) -> dict:
     return get_progress(user_id).as_dict()
 
 
-def generate_daily_picks_payload(
-    request: GenerateDailyPicksRequest,
+def run_test_generation_payload(
+    request: TestGenerationRequest,
     user_id: str,
+    admin_email: str,
     uow: ApiUnitOfWork | None = None,
     conn=None,
 ) -> dict:
     try:
-        _enforce_daily_picks_generate_limit(user_id)
+        _enforce_test_generation_limit(user_id)
         with open_api_unit_of_work(uow=uow, conn=conn) as active_uow:
 
             def run_pipeline_with_uow(**kwargs):
-                # End any request-scoped transaction before running pipeline setup.
-                # Pipeline opens separate DB connections and may execute DDL that
-                # otherwise blocks on locks held by this connection.
                 active_uow.conn.commit()
                 with track_pipeline(user_id):
                     summary = _run_pipeline(**kwargs)
@@ -340,16 +338,17 @@ def generate_daily_picks_payload(
                 active_uow.set_generated_run_ids(summary.get("run_ids", []))
                 return summary
 
-            return generate_daily_picks_payload_service(
+            return run_test_generation_payload_service(
                 request=request,
                 user_id=user_id,
+                admin_email=admin_email,
                 resolve_profile=lambda user_id, profile_id: _resolve_profile(
                     user_id=user_id,
                     profile_id=profile_id,
                     conn=active_uow.conn,
                 ),
                 run_pipeline=run_pipeline_with_uow,
-                get_daily_picks_payload=lambda user_id, profile_id, run_ids=None: get_daily_picks_payload(
+                get_test_generation_payload=lambda user_id, profile_id, run_ids=None: get_test_generation_payload(
                     user_id=user_id,
                     profile_id=profile_id,
                     run_ids=(

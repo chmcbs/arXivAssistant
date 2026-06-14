@@ -17,15 +17,67 @@ async function checkAuthenticatedSession({ sessionLabelEl, authGateEl, appEl }) 
   const session = await apiRequest("/auth/session", "GET");
   setDebugControlsVisible(Boolean(session.can_debug_access));
   if (!session.authenticated) {
-    sessionLabelEl.textContent = "Not signed in";
+    bindSessionMenu(sessionLabelEl, { authenticated: false });
     authGateEl.classList.remove("hidden");
     appEl.classList.add("hidden");
     return false;
   }
-  sessionLabelEl.textContent = session.email;
+  bindSessionMenu(sessionLabelEl, {
+    authenticated: true,
+    email: session.email,
+  });
   authGateEl.classList.add("hidden");
   appEl.classList.remove("hidden");
   return session;
+}
+
+function bindSessionMenu(sessionLabelEl, { authenticated, email }) {
+  const root = sessionLabelEl.closest(".session-menu");
+  const panel = root ? root.querySelector(".session-menu-panel") : null;
+  const logoutBtn = root ? root.querySelector(".session-logout-btn") : null;
+  if (!root || !panel || !logoutBtn) {
+    sessionLabelEl.textContent = authenticated ? email : "Not signed in";
+    return;
+  }
+
+  if (!authenticated) {
+    sessionLabelEl.disabled = true;
+    sessionLabelEl.textContent = "Not signed in";
+    panel.classList.add("hidden");
+    return;
+  }
+
+  sessionLabelEl.disabled = false;
+  sessionLabelEl.textContent = email;
+
+  if (root.dataset.bound === "1") {
+    return;
+  }
+  root.dataset.bound = "1";
+
+  sessionLabelEl.addEventListener("click", function (event) {
+    event.stopPropagation();
+    panel.classList.toggle("hidden");
+  });
+
+  logoutBtn.addEventListener("click", async function () {
+    try {
+      await apiRequest("/auth/logout", "POST");
+      window.location.href = "/";
+    } catch (error) {
+      panel.classList.add("hidden");
+      window.alert(String(error.message || error));
+    }
+  });
+
+  if (!document.documentElement.dataset.sessionMenuDismissBound) {
+    document.addEventListener("click", function () {
+      document.querySelectorAll(".session-menu-panel").forEach(function (el) {
+        el.classList.add("hidden");
+      });
+    });
+    document.documentElement.dataset.sessionMenuDismissBound = "1";
+  }
 }
 
 function bindMagicLinkForm({ formEl, statusEl, linkWrapEl, linkEl, nextPath = "" }) {
@@ -48,3 +100,14 @@ function bindMagicLinkForm({ formEl, statusEl, linkWrapEl, linkEl, nextPath = ""
     }
   });
 }
+
+async function refreshDebugAccess() {
+  try {
+    const session = await apiRequest("/auth/session", "GET");
+    setDebugControlsVisible(Boolean(session.can_debug_access));
+  } catch (_error) {
+    setDebugControlsVisible(false);
+  }
+}
+
+refreshDebugAccess();

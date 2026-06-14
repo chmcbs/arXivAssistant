@@ -9,6 +9,7 @@ import arxiv
 import psycopg
 
 from core.config import get_arxiv_categories
+from core.arxiv_text import format_arxiv_display_text
 from core.db import get_database_url
 from core.logging import get_logger
 from core.pipeline_progress import set_step
@@ -106,8 +107,8 @@ def save_papers(papers: list[arxiv.Result]) -> int:
     rows = [
         {
             "arxiv_id": clean_id(paper.get_short_id()),
-            "title": paper.title,
-            "abstract": paper.summary,
+            "title": format_arxiv_display_text(paper.title),
+            "abstract": format_arxiv_display_text(paper.summary),
             "authors": [str(author) for author in paper.authors],
             "published_at": paper.published,
             "updated_at": paper.updated,

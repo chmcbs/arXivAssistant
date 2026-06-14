@@ -19,12 +19,11 @@ PUBLIC_MAGIC_LINK_REDIRECTS = frozenset(
     {
         "/",
         "/profiles",
-        "/digest",
         "/papers",
     }
 )
 
-DEBUG_MAGIC_LINK_REDIRECTS = frozenset({"/validate"})
+DEBUG_MAGIC_LINK_REDIRECTS = frozenset({"/validate", "/digest"})
 
 
 def generate_csrf_token() -> str:

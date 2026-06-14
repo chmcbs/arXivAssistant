@@ -20,7 +20,7 @@ function formatGenerateProgress(progress) {
   if (!progress || !progress.active) {
     return "";
   }
-  // Label only in the digest UI; detail stays on GET /daily-picks/generate/progress for debugging.
+  // Label only in the digest UI; detail stays on GET /test-generation/progress for debugging.
   return progress.label || progress.step || "Working…";
 }
 
@@ -35,7 +35,7 @@ function startGenerateProgressPolling() {
   stopGenerateProgressPolling();
   generateProgressTimer = setInterval(async function () {
     try {
-      var progress = await apiRequest("/daily-picks/generate/progress", "GET");
+      var progress = await apiRequest("/test-generation/progress", "GET");
       var message = formatGenerateProgress(progress);
       if (message) {
         setStatus(message, false);
@@ -147,7 +147,7 @@ async function checkSession() {
 async function loadDigest() {
   setStatus("", false);
   try {
-    const payload = await apiRequest("/daily-picks", "GET");
+    const payload = await apiRequest("/test-generation", "GET");
     renderSections(payload.sections || []);
     setStatus("", false);
   } catch (error) {
@@ -179,8 +179,8 @@ async function generateDigest() {
     if (!profileIds.length) {
       throw new Error("Select at least one profile for the digest.");
     }
-    await apiRequest("/daily-picks/generate", "POST", { profile_ids: profileIds });
-    const digestPayload = await apiRequest("/daily-picks", "GET");
+    await apiRequest("/test-generation/run", "POST", { profile_ids: profileIds });
+    const digestPayload = await apiRequest("/test-generation", "GET");
     renderSections(digestPayload.sections || []);
     const allPicks = (digestPayload.sections || []).flatMap(function (section) {
       return section.picks || [];

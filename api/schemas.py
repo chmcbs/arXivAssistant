@@ -53,7 +53,7 @@ class DigestSection(BaseModel):
     picks: list[PublicPick]
 
 
-class DailyPicksResponse(BaseModel):
+class TestGenerationResponse(BaseModel):
     user_id: str
     profile_id: str
     needs_generation: bool
@@ -61,7 +61,7 @@ class DailyPicksResponse(BaseModel):
     sections: list[DigestSection]
 
 
-class DebugDailyPicksResponse(BaseModel):
+class TestGenerationDebugResponse(BaseModel):
     user_id: str
     profile_id: str
     needs_generation: bool
@@ -71,7 +71,7 @@ class DebugDailyPicksResponse(BaseModel):
     picks: list[DebugPick]
 
 
-class GenerateDailyPicksRequest(BaseModel):
+class TestGenerationRequest(BaseModel):
     profile_ids: list[str] = Field(min_length=1)
     max_results: int = Field(default=150, ge=1)
     embedding_limit: int = Field(default=600, ge=1)
@@ -89,7 +89,7 @@ class GenerationRunStatus(BaseModel):
     profile_statuses: list[GenerationProfileStatus]
 
 
-class GenerateDailyPicksProgressResponse(BaseModel):
+class TestGenerationProgressResponse(BaseModel):
     active: bool
     step: str | None = None
     label: str | None = None
@@ -97,7 +97,7 @@ class GenerateDailyPicksProgressResponse(BaseModel):
     updated_at: datetime | None = None
 
 
-class GenerateDailyPicksResponse(BaseModel):
+class TestGenerationRunResponse(BaseModel):
     user_id: str
     primary_profile_id: str
     requested_profile_ids: list[str]
@@ -108,6 +108,8 @@ class GenerateDailyPicksResponse(BaseModel):
     needs_generation: bool
     picks: list[PublicPick]
     sections: list[DigestSection]
+    email_status: str | None = None
+    email_error: str | None = None
 
 
 class FeedbackRequest(BaseModel):

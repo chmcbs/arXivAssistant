@@ -104,7 +104,11 @@ def test_build_digest_email_body_includes_picks_stars_category_and_footer(monkey
     assert "Rate papers: http://localhost:8000/papers" in body
     assert "Manage preferences: http://localhost:8000/profiles" in body
     assert "Unsubscribe: http://localhost:8000/email/unsubscribe" in body
-    assert "Not affiliated with arXiv" in body
+    assert "Papers are sourced from arXiv.org" in body
+    assert body.index("Papers are sourced from arXiv.org") < body.index(
+        "Unsubscribe: http://localhost:8000/email/unsubscribe"
+    )
+    assert "Not affiliated with arXiv" not in body
 
 
 def test_build_digest_email_html_matches_preview_layout(monkeypatch):
@@ -140,7 +144,10 @@ def test_build_digest_email_html_matches_preview_layout(monkeypatch):
     assert 'align="center"' in html
     assert "<h1" in html
     assert html.index("<h1") < html.index("background:#ffffff")
-    assert html.index("background:#ffffff") < html.index("Not affiliated with arXiv")
+    assert html.index("background:#ffffff") < html.index("Papers are sourced from arXiv.org")
+    assert html.index("Papers are sourced from arXiv.org") < html.index(
+        "Unsubscribe from digest emails"
+    )
     assert "text-align:center" in html.split("background:#ffffff")[0]
     assert "% match" not in html
 
@@ -262,6 +269,51 @@ def test_deliver_digest_email_for_user_sends_when_picks_exist(monkeypatch):
     assert send.call_args.kwargs["to_email"] == "reader@example.com"
     assert "plain_body" in send.call_args.kwargs
     assert "html_body" in send.call_args.kwargs
+
+
+def test_deliver_digest_email_for_user_can_redirect_to_admin_without_changing_content(
+    monkeypatch,
+):
+    monkeypatch.setenv("SMTP_HOST", "mailpit")
+    monkeypatch.setenv("EMAIL_FROM", "noreply@localhost")
+    sections = [
+        _sample_section(
+            picks=(
+                DigestPick(
+                    rank=1,
+                    arxiv_id="2601.00001",
+                    title="Sample Paper",
+                    description=None,
+                    pdf_url="https://arxiv.org/pdf/2601.00001",
+                    final_score=0.5,
+                ),
+            ),
+        )
+    ]
+    monkeypatch.setattr(
+        "core.digest_email.build_digest_sections",
+        Mock(return_value=sections),
+    )
+    monkeypatch.setattr("core.digest_email.ensure_email_settings", Mock())
+    monkeypatch.setattr(
+        "core.digest_email.build_unsubscribe_url",
+        Mock(return_value="http://localhost:8000/email/unsubscribe?token=abc"),
+    )
+    send = Mock()
+    monkeypatch.setattr("core.digest_email.send_digest_email", send)
+
+    result = deliver_digest_email_for_user(
+        user_id="reader@example.com",
+        profile_ids=["profile-1"],
+        run_ids=["run-1"],
+        to_email="chargleb@gmail.com",
+    )
+
+    assert result == {"status": "sent", "error_message": None}
+    assert send.call_args.kwargs["to_email"] == "chargleb@gmail.com"
+    assert send.call_args.kwargs["subject"] == build_digest_email_subject()
+    assert "Test digest email" not in send.call_args.kwargs["plain_body"]
+    assert "[Test]" not in send.call_args.kwargs["subject"]
 
 
 def test_deliver_digest_email_for_user_logs_failure_without_raising(monkeypatch):

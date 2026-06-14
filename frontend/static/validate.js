@@ -113,14 +113,14 @@ document.getElementById("generate-btn").addEventListener("click", function () {
       max_results: Number(document.getElementById("generate-max-results").value) || 150,
       embedding_limit: Number(document.getElementById("generate-embedding-limit").value) || 600
     };
-    return apiRequest("/daily-picks/generate", "POST", body);
+    return apiRequest("/test-generation/run", "POST", body);
   });
 });
 
 document.getElementById("daily-btn").addEventListener("click", function () {
   run("daily-out", async function () {
     var profileId = optionalString(document.getElementById("daily-profile-id").value);
-    var query = "/daily-picks";
+    var query = "/test-generation";
     if (profileId) {
       query += "?profile_id=" + encodeURIComponent(profileId);
     }
@@ -134,7 +134,7 @@ document.getElementById("debug-btn").addEventListener("click", function () {
     if (!profileId) {
       throw { status: 400, payload: { detail: "profile_id is required" } };
     }
-    var query = "/daily-picks/debug?profile_id=" + encodeURIComponent(profileId);
+    var query = "/test-generation/debug?profile_id=" + encodeURIComponent(profileId);
     return apiRequest(query, "GET");
   });
 });

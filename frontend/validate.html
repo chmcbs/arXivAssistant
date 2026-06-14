@@ -51,7 +51,7 @@
     </section>
 
     <section class="validation-card">
-      <h2>POST /daily-picks/generate</h2>
+      <h2>POST /test-generation/run</h2>
       <label for="generate-profile-ids">profile_ids (comma-separated)</label>
       <input id="generate-profile-ids" placeholder="uuid-1, uuid-2">
       <label for="generate-max-results">max_results</label>
@@ -63,7 +63,7 @@
     </section>
 
     <section class="validation-card">
-      <h2>GET /daily-picks</h2>
+      <h2>GET /test-generation</h2>
       <label for="daily-profile-id">profile_id (optional)</label>
       <input id="daily-profile-id" placeholder="profile-1">
       <button id="daily-btn">Load Daily Picks</button>
@@ -71,7 +71,7 @@
     </section>
 
     <section class="validation-card">
-      <h2>GET /daily-picks/debug</h2>
+      <h2>GET /test-generation/debug</h2>
       <label for="debug-profile-id">profile_id</label>
       <input id="debug-profile-id" placeholder="uuid from GET /profiles">
       <button id="debug-btn">Load Debug Picks</button>
