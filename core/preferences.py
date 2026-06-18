@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import psycopg
 
+from core.config import get_feedback_alpha_floor, get_feedback_dislike_weight
 from core.db import connection_scope
 from core.embeddings import embed_texts
 from core.profiles import require_profile_id
@@ -125,7 +126,7 @@ def blend_vectors(
 
 # Decay initial weight
 def feedback_alpha(num_feedbacks: int) -> float:
-    return 1 / (1 + num_feedbacks)
+    return max(get_feedback_alpha_floor(), 1 / (1 + num_feedbacks))
 
 
 # Normalise preference embedding so cosine distance compares direction rather than magnitude during ranking
@@ -142,20 +143,28 @@ def normalize_vector(vector: list[float]) -> list[float]:
 def compute_preference_vector(
     liked_vectors: list[list[float]],
     disliked_vectors: list[list[float]],
-    dislike_weight: float = 0.5,
+    dislike_weight: float | None = None,
 ) -> list[float]:
+    resolved_dislike_weight = (
+        get_feedback_dislike_weight() if dislike_weight is None else dislike_weight
+    )
+
     liked_mean = mean_vector(liked_vectors)
-
-    if not liked_mean:
-        raise ValueError("At least one liked paper is required to update preferences")
-
     disliked_mean = mean_vector(disliked_vectors)
+
+    if not liked_mean and not disliked_mean:
+        raise ValueError("At least one feedback embedding is required")
 
     if not disliked_mean:
         return liked_mean
 
+    if not liked_mean:
+        return [
+            -resolved_dislike_weight * disliked_value for disliked_value in disliked_mean
+        ]
+
     return [
-        liked_value - dislike_weight * disliked_value
+        liked_value - resolved_dislike_weight * disliked_value
         for liked_value, disliked_value in zip(liked_mean, disliked_mean)
     ]
 
@@ -269,13 +278,14 @@ def update_preference_embedding(
 
     num_feedbacks = len(liked_vectors) + len(disliked_vectors)
 
-    if not liked_vectors:
+    if num_feedbacks == 0:
         preference_vector = initial_vector
     else:
         feedback_vector = compute_preference_vector(
             liked_vectors,
             disliked_vectors,
         )
+        feedback_vector = normalize_vector(feedback_vector)
         alpha = feedback_alpha(num_feedbacks)
         preference_vector = blend_vectors(
             initial_vector,

@@ -82,6 +82,21 @@ def get_keyword_boost_cap() -> float:
     return raw_value
 
 
+# Feedback
+def get_feedback_alpha_floor() -> float:
+    raw_value = float(os.getenv("FEEDBACK_ALPHA_FLOOR", "0.20"))
+    if raw_value < 0 or raw_value > 1:
+        raise ValueError("FEEDBACK_ALPHA_FLOOR must be between 0 and 1")
+    return raw_value
+
+
+def get_feedback_dislike_weight() -> float:
+    raw_value = float(os.getenv("FEEDBACK_DISLIKE_WEIGHT", "0.50"))
+    if raw_value < 0:
+        raise ValueError("FEEDBACK_DISLIKE_WEIGHT must be non-negative")
+    return raw_value
+
+
 # URLs
 def get_product_name() -> str:
     raw = os.getenv("PRODUCT_NAME", "").strip()
