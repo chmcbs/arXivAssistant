@@ -240,12 +240,32 @@ def test_validate_route_returns_internal_validation_ui():
 
 def test_site_config_route_returns_product_name(monkeypatch):
     monkeypatch.setenv("PRODUCT_NAME", "Paper Radar")
+    monkeypatch.delenv("SOCIAL_X_URL", raising=False)
+    monkeypatch.delenv("SOCIAL_BLUESKY_URL", raising=False)
     client = TestClient(routes.app)
 
     response = client.get("/site-config")
 
     assert response.status_code == 200
-    assert response.json() == {"product_name": "Paper Radar"}
+    assert response.json() == {"product_name": "Paper Radar", "social_links": {}}
+
+
+def test_site_config_route_returns_social_links(monkeypatch):
+    monkeypatch.delenv("PRODUCT_NAME", raising=False)
+    monkeypatch.setenv("SOCIAL_X_URL", "https://x.com/researchpigeon_")
+    monkeypatch.setenv("SOCIAL_BLUESKY_URL", "https://bsky.app/profile/researchpigeon.com")
+    client = TestClient(routes.app)
+
+    response = client.get("/site-config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "product_name": "ResearchPigeon",
+        "social_links": {
+            "x": "https://x.com/researchpigeon_",
+            "bluesky": "https://bsky.app/profile/researchpigeon.com",
+        },
+    }
 
 
 def test_landing_profiles_and_digest_pages_are_served():

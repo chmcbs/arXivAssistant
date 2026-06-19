@@ -75,7 +75,14 @@ from api.schemas import (
     EmailSettingsResponse,
     UpdateEmailSettingsRequest,
 )
-from core.config import get_arxiv_category_options, get_product_name, is_app_https, is_debug_features_enabled, is_production
+from core.config import (
+    get_arxiv_category_options,
+    get_product_name,
+    get_social_links,
+    is_app_https,
+    is_debug_features_enabled,
+    is_production,
+)
 from core.db import check_database_connection
 from core.logging import configure_logging
 from core.security import (
@@ -218,7 +225,10 @@ def email_unsubscribe(token: str) -> RedirectResponse:
 
 @app.get("/site-config")
 def site_config() -> dict:
-    return {"product_name": get_product_name()}
+    return {
+        "product_name": get_product_name(),
+        "social_links": get_social_links(),
+    }
 
 
 @app.get("/categories")

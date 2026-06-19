@@ -17,6 +17,21 @@ def test_get_product_name_uses_environment(monkeypatch):
     assert config.get_product_name() == "Paper Radar"
 
 
+def test_get_social_links_returns_only_configured_urls(monkeypatch):
+    monkeypatch.delenv("SOCIAL_X_URL", raising=False)
+    monkeypatch.delenv("SOCIAL_BLUESKY_URL", raising=False)
+    assert config.get_social_links() == {}
+
+    monkeypatch.setenv("SOCIAL_X_URL", "https://x.com/researchpigeon_")
+    assert config.get_social_links() == {"x": "https://x.com/researchpigeon_"}
+
+    monkeypatch.setenv("SOCIAL_BLUESKY_URL", "https://bsky.app/profile/researchpigeon.com")
+    assert config.get_social_links() == {
+        "x": "https://x.com/researchpigeon_",
+        "bluesky": "https://bsky.app/profile/researchpigeon.com",
+    }
+
+
 def test_get_arxiv_categories_uses_default(monkeypatch):
     monkeypatch.delenv("ARXIV_CATEGORIES", raising=False)
 

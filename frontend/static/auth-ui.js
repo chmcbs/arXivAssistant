@@ -15,6 +15,18 @@ const MAGIC_LINK_NETWORK_ERROR_MESSAGE =
 const MAGIC_LINK_GENERIC_ERROR_MESSAGE =
   "Something went wrong. Please try again later.";
 
+const SESSION_MENU_ICON_SVG =
+  '<svg class="session-menu-icon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">' +
+  '<circle cx="12" cy="9" r="3.5"/>' +
+  '<path d="M5.25 20.25v-.75c0-3.04 3.02-5.5 6.75-5.5s6.75 2.46 6.75 5.5v.75"/>' +
+  "</svg>";
+
+function renderSessionMenuIcons() {
+  document.querySelectorAll(".session-menu-trigger").forEach(function (trigger) {
+    trigger.innerHTML = SESSION_MENU_ICON_SVG;
+  });
+}
+
 const MAGIC_LINK_USER_ERROR_MESSAGES = new Set([
   MAGIC_LINK_RATE_LIMIT_MESSAGE,
   MAGIC_LINK_INVALID_EMAIL_MESSAGE,
@@ -108,10 +120,50 @@ function setDebugControlsVisible(canAccess) {
   });
 }
 
+function isLandingPage() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return path === "/";
+}
+
+function getTopbarBrandEl() {
+  const topbar = document.querySelector("header.topbar");
+  return topbar ? topbar.querySelector(".brand.product-lockup") : null;
+}
+
+function bindTopbarBrandLink(authenticated) {
+  if (isLandingPage()) {
+    return;
+  }
+
+  const brand = getTopbarBrandEl();
+  if (!brand) {
+    return;
+  }
+
+  if (authenticated) {
+    if (brand.tagName === "A") {
+      const replacement = document.createElement("div");
+      replacement.className = brand.className;
+      replacement.innerHTML = brand.innerHTML;
+      brand.replaceWith(replacement);
+    }
+    return;
+  }
+
+  if (brand.tagName !== "A") {
+    const replacement = document.createElement("a");
+    replacement.className = brand.className;
+    replacement.href = "/";
+    replacement.innerHTML = brand.innerHTML;
+    brand.replaceWith(replacement);
+  }
+}
+
 async function checkAuthenticatedSession({ sessionLabelEl, authGateEl, appEl }) {
   try {
     const session = await apiRequest("/auth/session", "GET");
     setDebugControlsVisible(Boolean(session.can_debug_access));
+    bindTopbarBrandLink(Boolean(session.authenticated));
     if (!session.authenticated) {
       bindSessionMenu(sessionLabelEl, { authenticated: false });
       authGateEl.classList.remove("hidden");
@@ -127,6 +179,7 @@ async function checkAuthenticatedSession({ sessionLabelEl, authGateEl, appEl }) 
     return session;
   } catch (_error) {
     setDebugControlsVisible(false);
+    bindTopbarBrandLink(false);
     bindSessionMenu(sessionLabelEl, { authenticated: false });
     authGateEl.classList.remove("hidden");
     appEl.classList.add("hidden");
@@ -138,20 +191,28 @@ function bindSessionMenu(sessionLabelEl, { authenticated, email }) {
   const root = sessionLabelEl.closest(".session-menu");
   const panel = root ? root.querySelector(".session-menu-panel") : null;
   const logoutBtn = root ? root.querySelector(".session-logout-btn") : null;
+  const emailEl = root ? root.querySelector(".session-menu-email") : null;
   if (!root || !panel || !logoutBtn) {
-    sessionLabelEl.textContent = authenticated ? email : "Not signed in";
     return;
   }
 
   if (!authenticated) {
     sessionLabelEl.disabled = true;
-    sessionLabelEl.textContent = "Not signed in";
+    sessionLabelEl.setAttribute("aria-expanded", "false");
+    root.classList.add("hidden");
     panel.classList.add("hidden");
+    if (emailEl) {
+      emailEl.textContent = "";
+    }
     return;
   }
 
+  root.classList.remove("hidden");
   sessionLabelEl.disabled = false;
-  sessionLabelEl.textContent = email;
+  sessionLabelEl.setAttribute("aria-expanded", panel.classList.contains("hidden") ? "false" : "true");
+  if (emailEl) {
+    emailEl.textContent = email;
+  }
 
   if (root.dataset.bound === "1") {
     return;
@@ -160,7 +221,9 @@ function bindSessionMenu(sessionLabelEl, { authenticated, email }) {
 
   sessionLabelEl.addEventListener("click", function (event) {
     event.stopPropagation();
+    const isOpen = !panel.classList.contains("hidden");
     panel.classList.toggle("hidden");
+    sessionLabelEl.setAttribute("aria-expanded", isOpen ? "false" : "true");
   });
 
   logoutBtn.addEventListener("click", async function () {
@@ -169,6 +232,7 @@ function bindSessionMenu(sessionLabelEl, { authenticated, email }) {
       window.location.href = "/";
     } catch (error) {
       panel.classList.add("hidden");
+      sessionLabelEl.setAttribute("aria-expanded", "false");
       window.alert(String(error.message || error));
     }
   });
@@ -177,6 +241,9 @@ function bindSessionMenu(sessionLabelEl, { authenticated, email }) {
     document.addEventListener("click", function () {
       document.querySelectorAll(".session-menu-panel").forEach(function (el) {
         el.classList.add("hidden");
+      });
+      document.querySelectorAll(".session-menu-trigger").forEach(function (el) {
+        el.setAttribute("aria-expanded", "false");
       });
     });
     document.documentElement.dataset.sessionMenuDismissBound = "1";
@@ -204,13 +271,53 @@ function bindMagicLinkForm({ formEl, statusEl, linkWrapEl, linkEl, nextPath = ""
   });
 }
 
+function shouldRefreshTopbarSessionOnLoad() {
+  return Boolean(document.getElementById("session-label") && !document.getElementById("auth-gate"));
+}
+
 async function refreshDebugAccess() {
   try {
     const session = await apiRequest("/auth/session", "GET");
     setDebugControlsVisible(Boolean(session.can_debug_access));
+    bindTopbarBrandLink(Boolean(session.authenticated));
   } catch (_error) {
     setDebugControlsVisible(false);
+    bindTopbarBrandLink(false);
   }
 }
 
-refreshDebugAccess();
+async function refreshTopbarSession() {
+  const sessionLabelEl = document.getElementById("session-label");
+  try {
+    const session = await apiRequest("/auth/session", "GET");
+    setDebugControlsVisible(Boolean(session.can_debug_access));
+    bindTopbarBrandLink(Boolean(session.authenticated));
+    if (!sessionLabelEl) {
+      return;
+    }
+    if (session.authenticated) {
+      bindSessionMenu(sessionLabelEl, {
+        authenticated: true,
+        email: session.email,
+      });
+      return;
+    }
+    bindSessionMenu(sessionLabelEl, { authenticated: false });
+  } catch (_error) {
+    setDebugControlsVisible(false);
+    bindTopbarBrandLink(false);
+    if (sessionLabelEl) {
+      bindSessionMenu(sessionLabelEl, { authenticated: false });
+    }
+  }
+}
+
+if (document.querySelector(".session-menu-trigger")) {
+  renderSessionMenuIcons();
+}
+
+if (shouldRefreshTopbarSessionOnLoad()) {
+  refreshTopbarSession();
+} else if (!document.getElementById("auth-gate")) {
+  refreshDebugAccess();
+}

@@ -6,19 +6,37 @@
   <link rel="icon" href="/static/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
   <title>About - ResearchPigeon</title>
-  <link rel="stylesheet" href="/static/styles.css?v=35">
+  <link rel="stylesheet" href="/static/styles.css?v=76">
 </head>
 <body data-document-title="About" class="about-page-mono-preview">
   <header class="topbar">
-    <a class="brand product-lockup" href="/">
+    <div class="brand product-lockup">
       <img src="/static/favicon.png" alt="" class="product-icon" width="32" height="32">
       <span class="product-name-text">ResearchPigeon</span>
-    </a>
+    </div>
     <div class="row">
-      <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/papers">Papers</a>
-      <a class="link-btn hidden" href="/digest" data-debug-admin>Dev</a>
-      <a class="link-btn" href="/about">About</a>
+      <nav class="topbar-nav" aria-label="Primary">
+        <a class="link-btn hidden" href="/digest" data-debug-admin>Dev</a>
+        <a class="link-btn" href="/profiles">Profiles</a>
+        <a class="link-btn" href="/papers">Papers</a>
+        <a class="link-btn" href="/about">About</a>
+      </nav>
+      <div class="session-menu">
+        <button
+          type="button"
+          id="session-label"
+          class="session-menu-trigger"
+          aria-label="Account"
+          aria-expanded="false"
+          aria-haspopup="true"
+          disabled
+        >
+        </button>
+        <div class="session-menu-panel hidden">
+          <p class="session-menu-email" id="session-email"></p>
+          <button type="button" class="session-logout-btn">Logout</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -53,7 +71,7 @@
         If you have any questions or feedback, we'd love to hear from you!
       </p>
       <p>
-        Send us a message at <a href="mailto:hello@researchpigeon.com">hello@researchpigeon.com</a> or via one of our socials ツ
+        Say <a href="mailto:hello@researchpigeon.com">hello@researchpigeon.com</a>, or find our socials using the links below ツ
       </p>
     </section>
   </main>

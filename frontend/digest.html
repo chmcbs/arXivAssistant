@@ -6,7 +6,7 @@
   <link rel="icon" href="/static/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
   <title>Dev - ResearchPigeon</title>
-  <link rel="stylesheet" href="/static/styles.css?v=34">
+  <link rel="stylesheet" href="/static/styles.css?v=76">
 </head>
 <body data-document-title="Dev">
   <header class="topbar">
@@ -15,18 +15,28 @@
       <span class="product-name-text">ResearchPigeon</span>
     </div>
     <div class="row">
+      <nav class="topbar-nav" aria-label="Primary">
+        <a class="link-btn hidden" href="/digest" data-debug-admin>Dev</a>
+        <a class="link-btn" href="/profiles">Profiles</a>
+        <a class="link-btn" href="/papers">Papers</a>
+        <a class="link-btn" href="/about">About</a>
+      </nav>
       <div class="session-menu">
-        <button type="button" id="session-label" class="session-menu-trigger muted" disabled>
-          Checking session...
+        <button
+          type="button"
+          id="session-label"
+          class="session-menu-trigger"
+          aria-label="Account"
+          aria-expanded="false"
+          aria-haspopup="true"
+          disabled
+        >
         </button>
         <div class="session-menu-panel hidden">
+          <p class="session-menu-email" id="session-email"></p>
           <button type="button" class="session-logout-btn">Logout</button>
         </div>
       </div>
-      <a class="link-btn" href="/profiles">Profiles</a>
-      <a class="link-btn" href="/papers">Papers</a>
-      <a class="link-btn hidden" href="/digest" data-debug-admin>Dev</a>
-      <a class="link-btn" href="/about">About</a>
     </div>
   </header>
 
@@ -64,7 +74,6 @@
           <button id="generate-btn" type="button">Generate new digest</button>
         </div>
       </div>
-      <p class="muted digest-hub-intro">Generate and preview a daily digest for your profiles.</p>
       <p id="digest-status" class="status"></p>
       <div class="panel digest-preview-card hidden">
         <div class="digest-preview-header">
@@ -73,8 +82,8 @@
         </div>
         <div id="sections-wrap" class="digest-sections"></div>
         <div class="digest-feedback-cta">
-          <a class="link-btn" href="/papers">Rate papers</a>
-          <a class="link-btn" href="/profiles">Manage profiles</a>
+          <a class="digest-feedback-cta-btn" href="/papers">Rate papers</a>
+          <a class="digest-feedback-cta-btn" href="/profiles">Manage profiles</a>
         </div>
       </div>
       <p class="digest-preview-disclaimer muted tiny hidden">

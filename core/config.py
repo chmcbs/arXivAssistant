@@ -107,6 +107,30 @@ def get_app_base_url() -> str:
     return os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 
+def _get_optional_url_env(name: str) -> str | None:
+    raw = os.getenv(name, "").strip()
+    return raw or None
+
+
+def get_social_x_url() -> str | None:
+    return _get_optional_url_env("SOCIAL_X_URL")
+
+
+def get_social_bluesky_url() -> str | None:
+    return _get_optional_url_env("SOCIAL_BLUESKY_URL")
+
+
+def get_social_links() -> dict[str, str]:
+    links: dict[str, str] = {}
+    x_url = get_social_x_url()
+    if x_url:
+        links["x"] = x_url
+    bluesky_url = get_social_bluesky_url()
+    if bluesky_url:
+        links["bluesky"] = bluesky_url
+    return links
+
+
 def is_app_https() -> bool:
     return get_app_base_url().lower().startswith("https://")
 
